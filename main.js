@@ -60,10 +60,10 @@ const SOURCES = [
       const data = await fetchJson(url);
       return (data.results || [])
         .map(r => ({
-          title: r.libelle || r.objet || 'Avis BOAMP',
-          desc: r.objet || r.descripteur_libelle || '',
+          title: r.objet || 'Avis BOAMP',
+          desc: r.nomacheteur ? `${r.nomacheteur}${r.famille_libelle ? ' — ' + r.famille_libelle : ''}` : (r.famille_libelle || ''),
           date: (r.dateparution || '').slice(0, 10),
-          url: r.idweb ? `https://www.boamp.fr/avis/detail/${r.idweb}` : 'https://www.boamp.fr'
+          url: r.url_avis || (r.idweb ? `https://www.boamp.fr/pages/avis/?q=idweb:${r.idweb}` : 'https://www.boamp.fr')
         }))
         .filter(r => r.title);
     }
@@ -117,78 +117,23 @@ const SOURCES = [
     }
   },
   {
-    id: 'maximilien',
-    name: 'Maximilien',
+    id: 'boamp2',
+    name: 'BOAMP Attributions',
     country: '🇫🇷',
-    description: 'Plateforme Île-de-France',
-    url: 'https://www.maximilien.fr',
+    description: 'Avis d\'attribution BOAMP (contrats récemment attribués)',
+    url: 'https://www.boamp.fr',
     search: async (query) => {
       const encoded = encodeURIComponent(query);
-      const url = `https://www.maximilien.fr/index.php?page=entreprise.EntrepriseAdvancedSearch&AllCons&id_lot=0&y=0&texte=${encoded}`;
-      const html = await fetchHtml(url);
-      const cheerio = require('cheerio');
-      const $ = cheerio.load(html);
-      const results = [];
-      $('tr.tableRegular, tr.odd, tr.even, .result-item').each((i, el) => {
-        if (i >= 8) return false;
-        const title = $(el).find('td:nth-child(2), .objet, td a').first().text().trim();
-        const href = $(el).find('a').first().attr('href');
-        if (title && title.length > 5) results.push({
-          title, desc: '', date: '',
-          url: href ? (href.startsWith('http') ? href : 'https://www.maximilien.fr' + href) : url
-        });
-      });
-      return results;
-    }
-  },
-  {
-    id: 'achatpublic',
-    name: 'AchatPublic.com',
-    country: '🇫🇷',
-    description: 'Agrégateur de marchés publics français',
-    url: 'https://www.achatpublic.com',
-    search: async (query) => {
-      const encoded = encodeURIComponent(query);
-      const html = await fetchHtml(`https://www.achatpublic.com/recherche-marches?q=${encoded}`);
-      const cheerio = require('cheerio');
-      const $ = cheerio.load(html);
-      const results = [];
-      $('.avis, .result, .marche-item, article, .annonce').each((i, el) => {
-        if (i >= 8) return false;
-        const title = $(el).find('h2, h3, .title, a').first().text().trim();
-        const desc = $(el).find('p, .objet').first().text().trim();
-        const href = $(el).find('a').first().attr('href');
-        if (title && title.length > 5) results.push({
-          title, desc, date: '',
-          url: href ? (href.startsWith('http') ? href : 'https://www.achatpublic.com' + href) : 'https://www.achatpublic.com'
-        });
-      });
-      return results;
-    }
-  },
-  {
-    id: 'megalis',
-    name: 'Mégalis Bretagne',
-    country: '🇫🇷',
-    description: 'Plateforme Bretagne & régions',
-    url: 'https://www.marches-publics.info',
-    search: async (query) => {
-      const encoded = encodeURIComponent(query);
-      const url = `https://www.marches-publics.info/index.php?page=entreprise.EntrepriseAdvancedSearch&AllCons&id_lot=0&y=0&texte=${encoded}`;
-      const html = await fetchHtml(url);
-      const cheerio = require('cheerio');
-      const $ = cheerio.load(html);
-      const results = [];
-      $('tr.tableRegular, tr.odd, tr.even').each((i, el) => {
-        if (i >= 8) return false;
-        const title = $(el).find('td:nth-child(2), td a').first().text().trim();
-        const href = $(el).find('a').first().attr('href');
-        if (title && title.length > 5) results.push({
-          title, desc: '', date: '',
-          url: href ? (href.startsWith('http') ? href : 'https://www.marches-publics.info' + href) : url
-        });
-      });
-      return results;
+      const url = `https://boamp-datadila.opendatasoft.com/api/explore/v2.1/catalog/datasets/boamp/records?q=${encoded}&where=nature%3D%22ATTRIBUTION%22&limit=10&order_by=dateparution%20desc`;
+      const data = await fetchJson(url);
+      return (data.results || [])
+        .map(r => ({
+          title: r.objet || 'Attribution BOAMP',
+          desc: r.titulaire ? `Titulaire : ${r.titulaire}${r.nomacheteur ? ' — ' + r.nomacheteur : ''}` : (r.nomacheteur || ''),
+          date: (r.dateparution || '').slice(0, 10),
+          url: r.url_avis || (r.idweb ? `https://www.boamp.fr/pages/avis/?q=idweb:${r.idweb}` : 'https://www.boamp.fr')
+        }))
+        .filter(r => r.title);
     }
   }
 ];

@@ -1010,7 +1010,6 @@ async function runSearch(query, selected, aiConfig) {
   // AI Analysis
   if (aiEnabled && allResults.length > 0) {
     document.getElementById('progress-title').textContent = '🤖 Analyse IA en cours…';
-    searchBtn.textContent = '';
     document.getElementById('search-btn').classList.add('analyzing');
 
     const analysis = await window.api.analyzeWithAI({ aiConfig, query, results: allResults });
