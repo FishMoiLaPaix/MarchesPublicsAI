@@ -8,6 +8,7 @@ $ElectronVersion = "36.3.1"
 $ElectronZipUrl = "https://github.com/electron/electron/releases/download/v$ElectronVersion/electron-v$ElectronVersion-win32-x64.zip"
 $ElectronDir = "$AppDir\electron-bin"
 $ElectronExe = "$ElectronDir\electron.exe"
+$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 Write-Host ""
 Write-Host "  MarchesPublics AI -- Installation" -ForegroundColor Cyan
@@ -40,13 +41,24 @@ if (-not (Test-Path $AppDir)) {
     New-Item -ItemType Directory -Path $AppDir | Out-Null
 }
 
-$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+# -- 3. Sauvegarder le chemin source pour la synchronisation automatique --
+Set-Content "$AppDir\source_path.txt" $ScriptDir -Encoding UTF8
+Write-Host "  OK Chemin source enregistre" -ForegroundColor Green
+
+# -- 4. Copier les fichiers sources --
 foreach ($f in @("main.js", "preload.js", "index.html", "package.json")) {
     $src = Join-Path $ScriptDir $f
     if (Test-Path $src) { Copy-Item $src "$AppDir\$f" -Force }
 }
+$srcAssets = Join-Path $ScriptDir "assets"
+if (Test-Path $srcAssets) {
+    $dstAssets = Join-Path $AppDir "assets"
+    if (-not (Test-Path $dstAssets)) { New-Item -ItemType Directory -Path $dstAssets | Out-Null }
+    robocopy $srcAssets $dstAssets /MIR /R:1 /W:1 /NP /NFL /NDL /NJH /NJS | Out-Null
+}
+Write-Host "  OK Fichiers copies" -ForegroundColor Green
 
-# -- 3. Installer axios + cheerio (pas Electron via npm) --
+# -- 5. Installer axios + cheerio --
 Set-Location $AppDir
 $env:NPM_CONFIG_LOGLEVEL = "error"
 
@@ -58,7 +70,7 @@ if (-not (Test-Path "$AppDir\node_modules\axios")) {
     Write-Host "  OK Modules deja installes" -ForegroundColor Green
 }
 
-# -- 4. Telecharger Electron directement depuis GitHub --
+# -- 6. Telecharger Electron --
 if (-not (Test-Path $ElectronExe)) {
     Write-Host "  Telechargement Electron v$ElectronVersion..." -ForegroundColor Cyan
     $ZipPath = "$env:TEMP\electron-$ElectronVersion.zip"
@@ -89,25 +101,58 @@ if (-not (Test-Path $ElectronExe)) {
     Write-Host "  OK Electron deja present" -ForegroundColor Green
 }
 
-# -- 5. Creer launch.ps1 --
-$launchScript = "Start-Process `"$ElectronExe`" -ArgumentList `"$AppDir`" -WorkingDirectory `"$AppDir`""
-Set-Content "$AppDir\launch.ps1" $launchScript -Encoding UTF8
+# -- 7. Generer launch.ps1 avec synchronisation automatique --
+$launchContent = @'
+# Lance MarchesPublics AI en synchronisant les fichiers sources si modifies
 
-# -- 6. Raccourci Bureau --
+$AppDir = $PSScriptRoot
+$ElectronExe = "$AppDir\electron-bin\electron.exe"
+$SourcePath = (Get-Content "$AppDir\source_path.txt" -ErrorAction SilentlyContinue | Select-Object -First 1).Trim()
+
+if ($SourcePath -and (Test-Path $SourcePath)) {
+    $synced = @()
+    foreach ($f in @("main.js", "preload.js", "index.html", "package.json")) {
+        $src = Join-Path $SourcePath $f
+        $dst = Join-Path $AppDir $f
+        if (Test-Path $src) {
+            $srcTime = (Get-Item $src).LastWriteTime
+            $dstTime = if (Test-Path $dst) { (Get-Item $dst).LastWriteTime } else { [DateTime]::MinValue }
+            if ($srcTime -gt $dstTime) {
+                Copy-Item $src $dst -Force
+                $synced += $f
+            }
+        }
+    }
+    $srcAssets = Join-Path $SourcePath "assets"
+    $dstAssets = Join-Path $AppDir "assets"
+    if (Test-Path $srcAssets) {
+        if (-not (Test-Path $dstAssets)) { New-Item -ItemType Directory -Path $dstAssets | Out-Null }
+        $robocopyOut = robocopy $srcAssets $dstAssets /MIR /R:1 /W:1 /NP /NFL /NDL /NJH /NJS
+        if ($LASTEXITCODE -ge 1 -and $LASTEXITCODE -le 7) { $synced += "assets/" }
+    }
+    if ($synced.Count -gt 0) {
+        Write-Host "  Synchro: $($synced -join ', ')" -ForegroundColor Cyan
+    }
+}
+
+Start-Process $ElectronExe -ArgumentList $AppDir -WorkingDirectory $AppDir
+'@
+Set-Content "$AppDir\launch.ps1" $launchContent -Encoding UTF8
+Write-Host "  OK Lanceur avec synchro automatique cree" -ForegroundColor Green
+
+# -- 8. Raccourci Bureau --
 $WShell = New-Object -ComObject WScript.Shell
 $Desktop = $WShell.SpecialFolders("Desktop")
 $DesktopShortcut = "$Desktop\MarchesPublics AI.lnk"
-if (-not (Test-Path $DesktopShortcut)) {
-    $SC = $WShell.CreateShortcut($DesktopShortcut)
-    $SC.TargetPath = "powershell.exe"
-    $SC.Arguments = "-WindowStyle Hidden -ExecutionPolicy Bypass -File `"$AppDir\launch.ps1`""
-    $SC.WorkingDirectory = $AppDir
-    $SC.Description = "MarchesPublics AI"
-    $SC.Save()
-    Write-Host "  OK Raccourci cree sur le Bureau" -ForegroundColor Green
-}
+$SC = $WShell.CreateShortcut($DesktopShortcut)
+$SC.TargetPath = "powershell.exe"
+$SC.Arguments = "-WindowStyle Hidden -ExecutionPolicy Bypass -File `"$AppDir\launch.ps1`""
+$SC.WorkingDirectory = $AppDir
+$SC.Description = "MarchesPublics AI"
+$SC.Save()
+Write-Host "  OK Raccourci Bureau mis a jour" -ForegroundColor Green
 
-# -- 7. Lancer --
+# -- 9. Lancer --
 Write-Host ""
 Write-Host "  Installation terminee!" -ForegroundColor Green
 Write-Host "  Lancement de MarchesPublics AI..." -ForegroundColor Cyan
