@@ -3,6 +3,7 @@ const path = require('path');
 const https = require('https');
 const http = require('http');
 const { URL } = require('url');
+const fs = require('fs');
 
 let mainWindow;
 
@@ -35,6 +36,20 @@ function createWindow() {
 app.whenReady().then(createWindow);
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
+
+// ─── Persistent store (JSON file in userData) ────────────────────────────────
+let _storeCache = null;
+function loadStore() {
+  if (_storeCache) return _storeCache;
+  try { _storeCache = JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'store.json'), 'utf8')); }
+  catch { _storeCache = {}; }
+  return _storeCache;
+}
+function saveStore() {
+  try { fs.writeFileSync(path.join(app.getPath('userData'), 'store.json'), JSON.stringify(_storeCache), 'utf8'); } catch {}
+}
+ipcMain.handle('store-get', (event, key) => loadStore()[key] ?? null);
+ipcMain.handle('store-set', (event, key, value) => { loadStore()[key] = value; saveStore(); return true; });
 
 ipcMain.on('set-theme', (event, theme) => {
   if (!mainWindow) return;
@@ -177,6 +192,118 @@ const SOURCES = [
         const link = refCons && orgCons
           ? `https://www.marches-securises.fr/?page=Entreprise.EntrepriseConsultation&refConsultation=${refCons}&orgAcronyme=${orgCons}`
           : 'https://www.marches-securises.fr';
+        if (title && title.length > 5) results.push({ title, desc, date, url: link });
+      });
+      return results;
+    }
+  },
+  {
+    id: 'e-marchespublics',
+    name: 'e-Marchés Publics',
+    country: '🇫🇷',
+    description: 'Plateforme nationale dématérialisation ATEXO',
+    url: 'https://www.e-marchespublics.com',
+    search: async (query) => {
+      const encoded = encodeURIComponent(query);
+      const url = `https://www.e-marchespublics.com/index.php?page=entreprise.EntrepriseAdvancedSearch&AllCons&texte=${encoded}`;
+      const html = await fetchHtml(url);
+      const cheerio = require('cheerio');
+      const $ = cheerio.load(html);
+      const results = [];
+      $('.item_consultation').each((i, el) => {
+        if (i >= 10) return false;
+        const titleEl = $(el).find('[id*="panelBlocObjet"] .truncate-700');
+        const title = titleEl.attr('title') || titleEl.find('span').not('.h5, strong').last().text().trim();
+        const descEl = $(el).find('[id*="panelBlocDenomination"] .truncate-700');
+        const desc = descEl.attr('title') || descEl.find('.small').text().trim();
+        const day   = $(el).find('.date-min .day span').text().trim();
+        const month = $(el).find('.date-min .month span').text().trim();
+        const year  = $(el).find('.date-min .year span').text().trim();
+        const date  = day && year ? `${day} ${month} ${year}` : '';
+        const refCons = $(el).find('input[name*="refCons"]').val();
+        const orgCons = $(el).find('input[name*="orgCons"]').val();
+        const link = refCons && orgCons
+          ? `https://www.e-marchespublics.com/?page=Entreprise.EntrepriseConsultation&refConsultation=${refCons}&orgAcronyme=${orgCons}`
+          : 'https://www.e-marchespublics.com';
+        if (title && title.length > 5) results.push({ title, desc, date, url: link });
+      });
+      return results;
+    }
+  },
+  {
+    id: 'francemarches',
+    name: 'France Marchés',
+    country: '🇫🇷',
+    description: 'Portail n°1 des appels d\'offres — agrégateur national',
+    url: 'https://www.francemarches.com',
+    search: async (query) => {
+      const slug = query.trim().toLowerCase()
+        .normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+      const url = `https://www.francemarches.com/appels-offre/${slug}`;
+      const html = await fetchHtml(url);
+      const cheerio = require('cheerio');
+      const $ = cheerio.load(html);
+      const results = [];
+      // La liste d'avis est en balises <article> ou <div> avec class contenant "offre"
+      $('article, .offre, .result, .tender, .avis').each((i, el) => {
+        if (i >= 10) return false;
+        const title = $(el).find('h2, h3, .title, .objet').first().text().trim();
+        const desc  = $(el).find('.acheteur, .buyer, .organisme, p').first().text().trim();
+        const date  = $(el).find('.date, time, .parution').first().text().trim();
+        const href  = $(el).find('a').first().attr('href');
+        const link  = href ? (href.startsWith('http') ? href : 'https://www.francemarches.com' + href) : url;
+        if (title && title.length > 5) results.push({ title, desc, date, url: link });
+      });
+      return results;
+    }
+  },
+  {
+    id: 'marchesonline',
+    name: 'Marchés Online',
+    country: '🇫🇷',
+    description: 'Tous les appels d\'offres publics et privés en accès libre',
+    url: 'https://www.marchesonline.com',
+    search: async (query) => {
+      const encoded = encodeURIComponent(query);
+      const url = `https://www.marchesonline.com/appels-offres/en-cours?mots=${encoded}`;
+      const html = await fetchHtml(url);
+      const cheerio = require('cheerio');
+      const $ = cheerio.load(html);
+      const results = [];
+      $('.appel-offre, .ao-item, .result-item, article, .offer, [class*="marche"], [class*="appel"]').each((i, el) => {
+        if (i >= 10) return false;
+        const title = $(el).find('h2, h3, .title, .objet, strong').first().text().trim();
+        const desc  = $(el).find('.acheteur, .organisme, p, .desc').first().text().trim();
+        const date  = $(el).find('.date, time, .parution, .pub-date').first().text().trim();
+        const href  = $(el).find('a').first().attr('href');
+        const link  = href ? (href.startsWith('http') ? href : 'https://www.marchesonline.com' + href) : url;
+        if (title && title.length > 5) results.push({ title, desc, date, url: link });
+      });
+      return results;
+    }
+  },
+  {
+    id: 'aws-solutions',
+    name: 'AW Solutions',
+    country: '🇫🇷',
+    description: 'Plateforme de dématérialisation des marchés publics AW Solutions',
+    url: 'https://www.marches-publics.info',
+    search: async (query) => {
+      const encoded = encodeURIComponent(query);
+      const url = `https://www.marches-publics.info/mpiaws/index.cfm?fuseaction=entreprise.EntrepriseAdvancedSearch&AllCons&texte=${encoded}`;
+      const html = await fetchHtml(url);
+      const cheerio = require('cheerio');
+      const $ = cheerio.load(html);
+      const results = [];
+      // AWS utilise une structure ColdFusion similaire à ATEXO pour certaines vues
+      $('.item_consultation, .consultation-item, tr.ligneBlanche, tr.ligneGrise').each((i, el) => {
+        if (i >= 10) return false;
+        const title = $(el).find('.objet, [class*="objet"], td:nth-child(2), h3').first().text().trim();
+        const desc  = $(el).find('.acheteur, [class*="acheteur"], td:nth-child(3)').first().text().trim();
+        const date  = $(el).find('.date, td:nth-child(1), .parution').first().text().trim();
+        const href  = $(el).find('a').first().attr('href');
+        const link  = href ? (href.startsWith('http') ? href : 'https://www.marches-publics.info' + href) : url;
         if (title && title.length > 5) results.push({ title, desc, date, url: link });
       });
       return results;

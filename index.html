@@ -849,8 +849,12 @@ async function init() {
     updateProviderUI();
   }
 
-  renderRecentSearches();
-  renderRecentConfigs();
+  const [recentSearches, recentConfigs] = await Promise.all([
+    storeGet('recent-searches'),
+    storeGet('recent-configs')
+  ]);
+  renderRecentSearches(recentSearches || []);
+  renderRecentConfigs(recentConfigs || []);
 }
 
 // ─── Config persist ───────────────────────────────────────────────────────────
@@ -868,27 +872,32 @@ function loadConfig() {
   try { return JSON.parse(localStorage.getItem('ai-config')); } catch { return null; }
 }
 
+// ─── Persistent store (IPC → fichier userData, survit aux redémarrages) ───────
+async function storeGet(key) {
+  try { return await window.api.storeGet(key); } catch { return null; }
+}
+async function storeSet(key, value) {
+  try { await window.api.storeSet(key, value); } catch {}
+}
+
 // ─── Recent searches ──────────────────────────────────────────────────────────
-function saveRecentSearch(query) {
+async function saveRecentSearch(query) {
   if (!query || query.length < 2) return;
-  let list = [];
-  try { list = JSON.parse(localStorage.getItem('recent-searches') || '[]'); } catch {}
+  let list = (await storeGet('recent-searches')) || [];
   list = list.filter(q => q !== query);
   list.unshift(query);
   if (list.length > 8) list = list.slice(0, 8);
-  localStorage.setItem('recent-searches', JSON.stringify(list));
-  renderRecentSearches();
+  await storeSet('recent-searches', list);
+  renderRecentSearches(list);
 }
 
-function renderRecentSearches() {
-  let list = [];
-  try { list = JSON.parse(localStorage.getItem('recent-searches') || '[]'); } catch {}
+function renderRecentSearches(list) {
   const wrap = document.getElementById('recent-wrap');
   const chips = document.getElementById('recent-chips');
-  if (!list.length) { wrap.style.display = 'none'; return; }
+  if (!list || !list.length) { wrap.style.display = 'none'; return; }
   wrap.style.display = 'flex';
   chips.innerHTML = '';
-  list.forEach((q, i) => {
+  list.forEach((q) => {
     const chip = document.createElement('span');
     chip.className = 'recent-chip';
     chip.innerHTML = `<span class="recent-chip-text">${escHtml(q)}</span><button class="recent-chip-del" title="Supprimer">×</button>`;
@@ -896,41 +905,36 @@ function renderRecentSearches() {
       document.getElementById('search-input').value = q;
       document.getElementById('search-btn').click();
     });
-    chip.querySelector('.recent-chip-del').addEventListener('click', (e) => {
+    chip.querySelector('.recent-chip-del').addEventListener('click', async (e) => {
       e.stopPropagation();
-      let cur = [];
-      try { cur = JSON.parse(localStorage.getItem('recent-searches') || '[]'); } catch {}
-      cur.splice(cur.indexOf(q), 1);
-      localStorage.setItem('recent-searches', JSON.stringify(cur));
-      renderRecentSearches();
+      let cur = (await storeGet('recent-searches')) || [];
+      cur = cur.filter(x => x !== q);
+      await storeSet('recent-searches', cur);
+      renderRecentSearches(cur);
     });
     chips.appendChild(chip);
   });
 }
 
 // ─── Recent AI configs ────────────────────────────────────────────────────────
-function saveRecentConfig(cfg) {
+async function saveRecentConfig(cfg) {
   if (!cfg || (!cfg.apiKey && !cfg.endpoint)) return;
-  let list = [];
-  try { list = JSON.parse(localStorage.getItem('recent-configs') || '[]'); } catch {}
+  let list = (await storeGet('recent-configs')) || [];
   const key = cfg.provider + '|' + cfg.model + '|' + (cfg.endpoint || '');
   list = list.filter(c => (c.provider + '|' + c.model + '|' + (c.endpoint || '')) !== key);
-  const entry = { provider: cfg.provider, apiKey: cfg.apiKey, endpoint: cfg.endpoint || '', model: cfg.model || '' };
-  list.unshift(entry);
+  list.unshift({ provider: cfg.provider, apiKey: cfg.apiKey, endpoint: cfg.endpoint || '', model: cfg.model || '' });
   if (list.length > 4) list = list.slice(0, 4);
-  localStorage.setItem('recent-configs', JSON.stringify(list));
-  renderRecentConfigs();
+  await storeSet('recent-configs', list);
+  renderRecentConfigs(list);
 }
 
-function renderRecentConfigs() {
-  let list = [];
-  try { list = JSON.parse(localStorage.getItem('recent-configs') || '[]'); } catch {}
+function renderRecentConfigs(list) {
   const section = document.getElementById('recent-cfg-section');
   const listEl = document.getElementById('recent-cfg-list');
-  if (!list.length) { section.style.display = 'none'; return; }
+  if (!list || !list.length) { section.style.display = 'none'; return; }
   section.style.display = 'block';
   listEl.innerHTML = '';
-  list.forEach((cfg, i) => {
+  list.forEach((cfg) => {
     const item = document.createElement('div');
     item.className = 'recent-cfg-item';
     const modelLabel = cfg.model || (cfg.endpoint ? cfg.endpoint.replace(/^https?:\/\//, '').slice(0, 20) : '—');
