@@ -4,6 +4,10 @@
 $ErrorActionPreference = "Stop"
 $AppName = "MarchesPublicsAI"
 $AppDir = "$env:LOCALAPPDATA\$AppName"
+$ElectronVersion = "36.3.1"
+$ElectronZipUrl = "https://github.com/electron/electron/releases/download/v$ElectronVersion/electron-v$ElectronVersion-win32-x64.zip"
+$ElectronDir = "$AppDir\electron-bin"
+$ElectronExe = "$ElectronDir\electron.exe"
 
 Write-Host ""
 Write-Host "  MarchesPublics AI -- Installation" -ForegroundColor Cyan
@@ -14,24 +18,21 @@ Write-Host ""
 function Test-NodeVersion {
     try {
         $v = (node --version 2>$null).TrimStart('v')
-        $parts = $v.Split('.')
-        return [int]$parts[0] -ge 18
+        return [int]($v.Split('.')[0]) -ge 18
     } catch { return $false }
 }
 
 if (-not (Test-NodeVersion)) {
     Write-Host "  ATTENTION: Node.js 18+ est requis." -ForegroundColor Yellow
     Write-Host "  Telechargez-le sur https://nodejs.org" -ForegroundColor Yellow
-    Write-Host ""
     $open = Read-Host "  Ouvrir le site maintenant? (o/n)"
     if ($open -eq 'o') { Start-Process "https://nodejs.org/en/download" }
-    Read-Host "  Appuyez sur Entree apres l'installation de Node.js..."
+    Read-Host "  Appuyez sur Entree apres l'installation..."
     if (-not (Test-NodeVersion)) {
-        Write-Host "  ERREUR: Node.js non detecte. Abandon." -ForegroundColor Red
+        Write-Host "  ERREUR: Node.js non detecte." -ForegroundColor Red
         exit 1
     }
 }
-
 Write-Host "  OK Node.js detecte" -ForegroundColor Green
 
 # -- 2. Creer le dossier app --
@@ -40,59 +41,59 @@ if (-not (Test-Path $AppDir)) {
 }
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-
-$files = @("main.js", "preload.js", "index.html", "package.json")
-foreach ($f in $files) {
+foreach ($f in @("main.js", "preload.js", "index.html", "package.json")) {
     $src = Join-Path $ScriptDir $f
-    $dst = Join-Path $AppDir $f
-    if (Test-Path $src) {
-        Copy-Item $src $dst -Force
-    }
+    if (Test-Path $src) { Copy-Item $src "$AppDir\$f" -Force }
 }
 
-# -- 3. Installer les dependances --
+# -- 3. Installer axios + cheerio (pas Electron via npm) --
 Set-Location $AppDir
 $env:NPM_CONFIG_LOGLEVEL = "error"
 
-# Verifier si Electron est installe ET fonctionnel
-function Test-ElectronOk {
-    $idx = "$AppDir\node_modules\electron\index.js"
-    if (-not (Test-Path $idx)) { return $false }
-    # Verifier que le path.txt existe (binaire telecharge)
-    $pathTxt = "$AppDir\node_modules\electron\path.txt"
-    if (-not (Test-Path $pathTxt)) { return $false }
-    $exeName = Get-Content $pathTxt -ErrorAction SilentlyContinue
-    $exePath = "$AppDir\node_modules\electron\dist\$exeName"
-    return (Test-Path $exePath)
+if (-not (Test-Path "$AppDir\node_modules\axios")) {
+    Write-Host "  Installation des modules Node..." -ForegroundColor Cyan
+    cmd /c "npm install axios cheerio --loglevel=error 2>nul"
+    Write-Host "  OK Modules installes" -ForegroundColor Green
+} else {
+    Write-Host "  OK Modules deja installes" -ForegroundColor Green
 }
 
-if (-not (Test-ElectronOk)) {
-    Write-Host "  Installation des dependances (premiere fois ~2 min)..." -ForegroundColor Cyan
+# -- 4. Telecharger Electron directement depuis GitHub --
+if (-not (Test-Path $ElectronExe)) {
+    Write-Host "  Telechargement Electron v$ElectronVersion..." -ForegroundColor Cyan
+    $ZipPath = "$env:TEMP\electron-$ElectronVersion.zip"
 
-    # Nettoyer un electron corrompu si present
-    $electronDir = "$AppDir\node_modules\electron"
-    if (Test-Path $electronDir) {
-        Write-Host "  Nettoyage Electron corrompu..." -ForegroundColor Yellow
-        Remove-Item $electronDir -Recurse -Force
-    }
-
-    cmd /c "npm install --save-dev electron --loglevel=error 2>nul"
-
-    # Verifier que ca a marche
-    if (-not (Test-ElectronOk)) {
-        Write-Host "  ERREUR: Electron n'a pas pu etre installe." -ForegroundColor Red
-        Write-Host "  Verifiez votre connexion internet et relancez." -ForegroundColor Red
-        Read-Host "  Appuyez sur Entree pour fermer"
+    try {
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        $wc = New-Object System.Net.WebClient
+        $wc.Headers.Add("User-Agent", "MarchesPublicsAI-Installer")
+        $wc.DownloadFile($ElectronZipUrl, $ZipPath)
+    } catch {
+        Write-Host "  ERREUR: Impossible de telecharger Electron." -ForegroundColor Red
+        Write-Host "  Cause: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host ""
+        Write-Host "  Telechargez manuellement:" -ForegroundColor Yellow
+        Write-Host "  $ElectronZipUrl" -ForegroundColor Yellow
+        Write-Host "  Extrayez dans: $ElectronDir" -ForegroundColor Yellow
+        Read-Host "  Entree pour fermer"
         exit 1
     }
 
-    cmd /c "npm install axios cheerio --loglevel=error 2>nul"
-    Write-Host "  OK Dependances installees" -ForegroundColor Green
+    Write-Host "  Extraction..." -ForegroundColor Cyan
+    if (Test-Path $ElectronDir) { Remove-Item $ElectronDir -Recurse -Force }
+    New-Item -ItemType Directory -Path $ElectronDir | Out-Null
+    Expand-Archive -Path $ZipPath -DestinationPath $ElectronDir -Force
+    Remove-Item $ZipPath -Force
+    Write-Host "  OK Electron installe" -ForegroundColor Green
 } else {
-    Write-Host "  OK Dependances deja installees" -ForegroundColor Green
+    Write-Host "  OK Electron deja present" -ForegroundColor Green
 }
 
-# -- 4. Creer le raccourci Bureau --
+# -- 5. Creer launch.ps1 --
+$launchScript = "Start-Process `"$ElectronExe`" -ArgumentList `"$AppDir`" -WorkingDirectory `"$AppDir`""
+Set-Content "$AppDir\launch.ps1" $launchScript -Encoding UTF8
+
+# -- 6. Raccourci Bureau --
 $WShell = New-Object -ComObject WScript.Shell
 $Desktop = $WShell.SpecialFolders("Desktop")
 $DesktopShortcut = "$Desktop\MarchesPublics AI.lnk"
@@ -106,14 +107,10 @@ if (-not (Test-Path $DesktopShortcut)) {
     Write-Host "  OK Raccourci cree sur le Bureau" -ForegroundColor Green
 }
 
-# -- 5. Creer launch.ps1 --
-$launchScript = "Set-Location `"$AppDir`"`nnpx electron . 2>`$null"
-Set-Content "$AppDir\launch.ps1" $launchScript -Encoding UTF8
-
-# -- 6. Lancer l'application --
+# -- 7. Lancer --
 Write-Host ""
 Write-Host "  Installation terminee!" -ForegroundColor Green
 Write-Host "  Lancement de MarchesPublics AI..." -ForegroundColor Cyan
 Write-Host ""
 
-npx electron .
+Start-Process $ElectronExe -ArgumentList $AppDir -WorkingDirectory $AppDir

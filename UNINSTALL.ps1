@@ -23,7 +23,7 @@ if (Test-Path $Shortcut) {
     Write-Host "  OK Raccourci Bureau supprime" -ForegroundColor Green
 }
 
-# -- Dossier app (node_modules + fichiers) --
+# -- Dossier app (electron-bin + node_modules + fichiers) --
 if (Test-Path $AppDir) {
     Remove-Item $AppDir -Recurse -Force
     Write-Host "  OK Dossier application supprime ($AppDir)" -ForegroundColor Green
