@@ -30,12 +30,23 @@ function createWindow() {
   });
 
   mainWindow.loadFile('index.html');
-  mainWindow.once('ready-to-show', () => mainWindow.show());
+  const doShow = () => { try { if (mainWindow && !mainWindow.isVisible()) mainWindow.show(); } catch {} };
+  mainWindow.once('ready-to-show', doShow);
+  setTimeout(doShow, 6000); // fallback si ready-to-show ne se déclenche pas
 }
 
-app.whenReady().then(createWindow);
-app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
-app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
+// Empêche plusieurs instances simultanées (cause du "doit relancer plusieurs fois")
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (mainWindow) { if (mainWindow.isMinimized()) mainWindow.restore(); mainWindow.focus(); }
+  });
+  app.whenReady().then(createWindow);
+  app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
+  app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
+}
 
 // ─── Persistent store (JSON file in userData) ────────────────────────────────
 let _storeCache = null;
@@ -71,7 +82,7 @@ const SOURCES = [
     search: async (query) => {
       const encoded = encodeURIComponent(query);
       // API OpenDataSoft officielle BOAMP — fiable et sans scraping
-      const url = `https://boamp-datadila.opendatasoft.com/api/explore/v2.1/catalog/datasets/boamp/records?q=${encoded}&limit=10&order_by=dateparution%20desc`;
+      const url = `https://boamp-datadila.opendatasoft.com/api/explore/v2.1/catalog/datasets/boamp/records?q=${encoded}&limit=20&order_by=dateparution%20desc`;
       const data = await fetchJson(url);
       return (data.results || [])
         .map(r => ({
@@ -97,7 +108,7 @@ const SOURCES = [
       const $ = cheerio.load(html);
       const results = [];
       $('tr.tableRegular, .dce-item, .result-row, li.resultat, .avis-item').each((i, el) => {
-        if (i >= 10) return false;
+        if (i >= 20) return false;
         const title = $(el).find('td:nth-child(2), .objet, h3, .libelle, a').first().text().trim();
         const date = $(el).find('td:nth-child(4), .date, time').first().text().trim();
         const href = $(el).find('a').first().attr('href');
@@ -116,19 +127,24 @@ const SOURCES = [
     description: 'Tenders Electronic Daily — Marchés européens',
     url: 'https://ted.europa.eu',
     search: async (query) => {
-      // Le paramètre q entier doit être encodé (espace et parenthèses inclus)
-      const q = encodeURIComponent(`LANG:FR AND (${query})`);
-      const apiUrl = `https://ted.europa.eu/api/v2.0/notices/search?fields=ND,TI,PD,MA,IA,CY&q=${q}&scope=3&limit=10&sortField=ND&sortOrder=DESC`;
+      // Les champs TED sont des tableaux d'objets {lang: "valeur"} — helper pour les extraire
+      const getStr = (f) => {
+        if (!f) return '';
+        if (typeof f === 'string') return f;
+        if (Array.isArray(f)) return getStr(f[0]);
+        if (typeof f === 'object') return Object.values(f).find(v => v) || '';
+        return String(f);
+      };
+      const q = encodeURIComponent(query);
+      const apiUrl = `https://ted.europa.eu/api/v2.0/notices/search?fields=ND,TI,PD,MA&q=${q}&scope=3&limit=20&sortField=ND&sortOrder=DESC`;
       const data = await fetchJson(apiUrl);
       const notices = data.results || data.notices || [];
-      return notices
-        .map(n => ({
-          title: n.TI || n.title || 'Avis TED',
-          desc: n.IA || n.subject || '',
-          date: n.PD || n.publicationDate || '',
-          url: n.ND ? `https://ted.europa.eu/udl?uri=TED:NOTICE:${n.ND}:TEXT:FR:HTML` : 'https://ted.europa.eu'
-        }))
-        .filter(r => r.title);
+      return notices.map(n => ({
+        title: getStr(n.TI) || 'Avis TED',
+        desc: getStr(n.MA) || '',
+        date: getStr(n.PD).slice(0, 10),
+        url: getStr(n.ND) ? `https://ted.europa.eu/udl?uri=TED:NOTICE:${getStr(n.ND)}:TEXT:FR:HTML` : 'https://ted.europa.eu'
+      })).filter(r => r.title && r.title !== 'Avis TED');
     }
   },
   {
@@ -145,7 +161,7 @@ const SOURCES = [
       const $ = cheerio.load(html);
       const results = [];
       $('.item_consultation').each((i, el) => {
-        if (i >= 10) return false;
+        if (i >= 20) return false;
         const titleEl = $(el).find('[id*="panelBlocObjet"] .truncate-700');
         const title = titleEl.attr('title') || titleEl.find('span').not('.h5, strong').last().text().trim();
         const descEl = $(el).find('[id*="panelBlocDenomination"] .truncate-700');
@@ -178,7 +194,7 @@ const SOURCES = [
       const $ = cheerio.load(html);
       const results = [];
       $('.item_consultation').each((i, el) => {
-        if (i >= 10) return false;
+        if (i >= 20) return false;
         const titleEl = $(el).find('[id*="panelBlocObjet"] .truncate-700');
         const title = titleEl.attr('title') || titleEl.find('span').not('.h5, strong').last().text().trim();
         const descEl = $(el).find('[id*="panelBlocDenomination"] .truncate-700');
@@ -201,31 +217,29 @@ const SOURCES = [
     id: 'e-marchespublics',
     name: 'e-Marchés Publics',
     country: '🇫🇷',
-    description: 'Plateforme nationale dématérialisation ATEXO',
+    description: 'Portail national des appels d\'offres publics et dématérialisation',
     url: 'https://www.e-marchespublics.com',
     search: async (query) => {
+      const slug = query.trim().toLowerCase()
+        .normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
       const encoded = encodeURIComponent(query);
-      const url = `https://www.e-marchespublics.com/index.php?page=entreprise.EntrepriseAdvancedSearch&AllCons&texte=${encoded}`;
+      // Essai 1 : page de résultats par slug
+      const url = `https://www.e-marchespublics.com/appels-offres/${slug}`;
       const html = await fetchHtml(url);
       const cheerio = require('cheerio');
       const $ = cheerio.load(html);
       const results = [];
-      $('.item_consultation').each((i, el) => {
-        if (i >= 10) return false;
-        const titleEl = $(el).find('[id*="panelBlocObjet"] .truncate-700');
-        const title = titleEl.attr('title') || titleEl.find('span').not('.h5, strong').last().text().trim();
-        const descEl = $(el).find('[id*="panelBlocDenomination"] .truncate-700');
-        const desc = descEl.attr('title') || descEl.find('.small').text().trim();
-        const day   = $(el).find('.date-min .day span').text().trim();
-        const month = $(el).find('.date-min .month span').text().trim();
-        const year  = $(el).find('.date-min .year span').text().trim();
-        const date  = day && year ? `${day} ${month} ${year}` : '';
-        const refCons = $(el).find('input[name*="refCons"]').val();
-        const orgCons = $(el).find('input[name*="orgCons"]').val();
-        const link = refCons && orgCons
-          ? `https://www.e-marchespublics.com/?page=Entreprise.EntrepriseConsultation&refConsultation=${refCons}&orgAcronyme=${orgCons}`
-          : 'https://www.e-marchespublics.com';
-        if (title && title.length > 5) results.push({ title, desc, date, url: link });
+      // Sélecteurs larges pour agrégateur de marchés
+      $('article, .offre, .tender, .consultation, .ao, li.item, .card, [class*="marche"], [class*="offre"]').each((i, el) => {
+        if (i >= 20) return false;
+        const titleEl = $(el).find('h1, h2, h3, .title, .objet, strong a, a').first();
+        const title = titleEl.attr('title') || titleEl.text().trim();
+        const desc  = $(el).find('.acheteur, .organisme, .buyer, p, .desc, .subtitle').first().text().trim();
+        const date  = $(el).find('.date, time, [datetime], .parution, .pub').first().text().trim();
+        const href  = $(el).find('a').first().attr('href') || titleEl.attr('href');
+        const link  = href ? (href.startsWith('http') ? href : 'https://www.e-marchespublics.com' + href) : url;
+        if (title && title.length > 8) results.push({ title, desc, date, url: link });
       });
       return results;
     }
@@ -237,6 +251,7 @@ const SOURCES = [
     description: 'Portail n°1 des appels d\'offres — agrégateur national',
     url: 'https://www.francemarches.com',
     search: async (query) => {
+      // France Marchés utilise des URL slug : /appels-offre/MOT-CLE
       const slug = query.trim().toLowerCase()
         .normalize('NFD').replace(/[̀-ͯ]/g, '')
         .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
@@ -245,15 +260,16 @@ const SOURCES = [
       const cheerio = require('cheerio');
       const $ = cheerio.load(html);
       const results = [];
-      // La liste d'avis est en balises <article> ou <div> avec class contenant "offre"
-      $('article, .offre, .result, .tender, .avis').each((i, el) => {
-        if (i >= 10) return false;
-        const title = $(el).find('h2, h3, .title, .objet').first().text().trim();
-        const desc  = $(el).find('.acheteur, .buyer, .organisme, p').first().text().trim();
-        const date  = $(el).find('.date, time, .parution').first().text().trim();
-        const href  = $(el).find('a').first().attr('href');
+      // Selectors France Marchés (liste d'avis)
+      $('article, li.offre, .offre-item, .result-offre, .item-offre, [class*="offre"], [class*="avis"]').each((i, el) => {
+        if (i >= 20) return false;
+        const linkEl = $(el).find('a[href*="/appel-offre/"], a[href*="/offre/"]').first();
+        const title = linkEl.text().trim() || $(el).find('h2, h3, .title').first().text().trim();
+        const desc  = $(el).find('.acheteur, .buyer, .organisme, .reference, p').first().text().trim();
+        const date  = $(el).find('.date, time, .parution, .publication').first().text().trim();
+        const href  = linkEl.attr('href') || $(el).find('a').first().attr('href');
         const link  = href ? (href.startsWith('http') ? href : 'https://www.francemarches.com' + href) : url;
-        if (title && title.length > 5) results.push({ title, desc, date, url: link });
+        if (title && title.length > 8) results.push({ title, desc, date, url: link });
       });
       return results;
     }
@@ -266,19 +282,24 @@ const SOURCES = [
     url: 'https://www.marchesonline.com',
     search: async (query) => {
       const encoded = encodeURIComponent(query);
+      // Marchés Online : paramètre de recherche "mots" ou "q"
       const url = `https://www.marchesonline.com/appels-offres/en-cours?mots=${encoded}`;
       const html = await fetchHtml(url);
       const cheerio = require('cheerio');
       const $ = cheerio.load(html);
       const results = [];
-      $('.appel-offre, .ao-item, .result-item, article, .offer, [class*="marche"], [class*="appel"]').each((i, el) => {
-        if (i >= 10) return false;
-        const title = $(el).find('h2, h3, .title, .objet, strong').first().text().trim();
-        const desc  = $(el).find('.acheteur, .organisme, p, .desc').first().text().trim();
-        const date  = $(el).find('.date, time, .parution, .pub-date').first().text().trim();
-        const href  = $(el).find('a').first().attr('href');
+      // Sélecteurs pour Marchés Online (SSR, liste d'avis)
+      $('article, li, .appel, .ao, .offre, tr, [class*="ao-"], [class*="appel"]').each((i, el) => {
+        if (i >= 20) return false;
+        const linkEl = $(el).find('a').first();
+        const title = linkEl.text().trim() || $(el).find('h2, h3, strong, .title').first().text().trim();
+        const desc  = $(el).find('.organisme, .acheteur, .ref, td:nth-child(2), p').first().text().trim();
+        const date  = $(el).find('.date, time, td:nth-child(1), .pub').first().text().trim();
+        const href  = linkEl.attr('href');
         const link  = href ? (href.startsWith('http') ? href : 'https://www.marchesonline.com' + href) : url;
-        if (title && title.length > 5) results.push({ title, desc, date, url: link });
+        if (title && title.length > 8 && !title.includes('Connexion') && !title.includes('Abonnement')) {
+          results.push({ title, desc, date, url: link });
+        }
       });
       return results;
     }
@@ -287,24 +308,26 @@ const SOURCES = [
     id: 'aws-solutions',
     name: 'AW Solutions',
     country: '🇫🇷',
-    description: 'Plateforme de dématérialisation des marchés publics AW Solutions',
+    description: 'Plateforme dématérialisation AW Solutions (awsolutions.fr)',
     url: 'https://www.marches-publics.info',
     search: async (query) => {
       const encoded = encodeURIComponent(query);
-      const url = `https://www.marches-publics.info/mpiaws/index.cfm?fuseaction=entreprise.EntrepriseAdvancedSearch&AllCons&texte=${encoded}`;
+      // AW Solutions / marches-publics.info — plateforme ColdFusion
+      const url = `https://www.marches-publics.info/mpiaws/index.cfm?fuseaction=entreprise.recherche&texte=${encoded}&AllCons`;
       const html = await fetchHtml(url);
       const cheerio = require('cheerio');
       const $ = cheerio.load(html);
       const results = [];
-      // AWS utilise une structure ColdFusion similaire à ATEXO pour certaines vues
-      $('.item_consultation, .consultation-item, tr.ligneBlanche, tr.ligneGrise').each((i, el) => {
-        if (i >= 10) return false;
-        const title = $(el).find('.objet, [class*="objet"], td:nth-child(2), h3').first().text().trim();
-        const desc  = $(el).find('.acheteur, [class*="acheteur"], td:nth-child(3)').first().text().trim();
-        const date  = $(el).find('.date, td:nth-child(1), .parution').first().text().trim();
+      // Structure ColdFusion avec tableaux de résultats
+      $('tr.ligneBlanche, tr.ligneGrise, tr[class*="ligne"], .item_consultation, tr:has(td a[href*="consultation"])').each((i, el) => {
+        if (i >= 20) return false;
+        const cells = $(el).find('td');
+        const title = cells.eq(1).text().trim() || cells.eq(0).find('a').text().trim() || $(el).find('.objet, h3').first().text().trim();
+        const desc  = cells.eq(2).text().trim() || $(el).find('.acheteur').first().text().trim();
+        const date  = cells.eq(0).text().trim() || $(el).find('.date').first().text().trim();
         const href  = $(el).find('a').first().attr('href');
         const link  = href ? (href.startsWith('http') ? href : 'https://www.marches-publics.info' + href) : url;
-        if (title && title.length > 5) results.push({ title, desc, date, url: link });
+        if (title && title.length > 8) results.push({ title, desc, date, url: link });
       });
       return results;
     }
@@ -317,7 +340,7 @@ const SOURCES = [
     url: 'https://www.boamp.fr',
     search: async (query) => {
       const encoded = encodeURIComponent(query);
-      const url = `https://boamp-datadila.opendatasoft.com/api/explore/v2.1/catalog/datasets/boamp/records?q=${encoded}&where=nature%3D%22ATTRIBUTION%22&limit=10&order_by=dateparution%20desc`;
+      const url = `https://boamp-datadila.opendatasoft.com/api/explore/v2.1/catalog/datasets/boamp/records?q=${encoded}&where=nature%3D%22ATTRIBUTION%22&limit=20&order_by=dateparution%20desc`;
       const data = await fetchJson(url);
       return (data.results || [])
         .map(r => ({
@@ -361,8 +384,30 @@ function fetchHtml(url, timeout = 15000) {
   });
 }
 
-function fetchJson(url, timeout = 12000) {
-  return fetchHtml(url, timeout).then(t => JSON.parse(t));
+function fetchJson(url, timeout = 15000) {
+  return new Promise((resolve, reject) => {
+    const parsed = new URL(url);
+    const lib = parsed.protocol === 'https:' ? https : http;
+    const req = lib.get(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'fr-FR,fr;q=0.9,en;q=0.8'
+      },
+      timeout
+    }, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        res.resume();
+        return fetchJson(res.headers.location, timeout).then(resolve).catch(reject);
+      }
+      if (res.statusCode >= 400) { res.resume(); return reject(new Error(`HTTP ${res.statusCode}`)); }
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => { try { resolve(JSON.parse(data)); } catch { reject(new Error('Réponse non-JSON: ' + data.slice(0, 120))); } });
+    });
+    req.on('error', reject);
+    req.on('timeout', () => { req.destroy(); reject(new Error('Timeout')); });
+  });
 }
 
 // ─── AI call (multi-provider) ────────────────────────────────────────────────

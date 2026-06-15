@@ -1143,7 +1143,11 @@ async function runSearch(query, selected, aiConfig) {
     const s = sources.find(x => x.id === sourceId);
     const badge = badges[sourceId];
 
-    if (result.error || result.results.length === 0) {
+    if (result.error) {
+      badge.className = 'source-badge error';
+      badge.innerHTML = `<div class="dot"></div>${s?.name || sourceId} ✗`;
+      badge.title = result.error;
+    } else if (result.results.length === 0) {
       badge.className = 'source-badge error';
       badge.innerHTML = `<div class="dot"></div>${s?.name || sourceId} (0)`;
     } else {
