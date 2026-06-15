@@ -55,22 +55,17 @@ const SOURCES = [
     url: 'https://www.boamp.fr',
     search: async (query) => {
       const encoded = encodeURIComponent(query);
-      const url = `https://www.boamp.fr/avis/search?q=${encoded}&type=MARCHE&sort=date_publication_desc`;
-      try {
-        const html = await fetchHtml(url);
-        const cheerio = require('cheerio');
-        const $ = cheerio.load(html);
-        const results = [];
-        $('.avis-item, .search-result-item, article.avis').each((i, el) => {
-          if (i >= 10) return false;
-          const title = $(el).find('h2, h3, .title, .avis-title').first().text().trim();
-          const desc = $(el).find('p, .description, .objet').first().text().trim();
-          const href = $(el).find('a').first().attr('href');
-          const date = $(el).find('.date, time, .publication-date').first().text().trim();
-          if (title) results.push({ title, desc, date, url: href ? (href.startsWith('http') ? href : 'https://www.boamp.fr' + href) : url });
-        });
-        return results;
-      } catch (e) { return []; }
+      // API OpenDataSoft officielle BOAMP — fiable et sans scraping
+      const url = `https://boamp-datadila.opendatasoft.com/api/explore/v2.1/catalog/datasets/boamp/records?q=${encoded}&limit=10&order_by=dateparution%20desc`;
+      const data = await fetchJson(url);
+      return (data.results || [])
+        .map(r => ({
+          title: r.libelle || r.objet || 'Avis BOAMP',
+          desc: r.objet || r.descripteur_libelle || '',
+          date: (r.dateparution || '').slice(0, 10),
+          url: r.idweb ? `https://www.boamp.fr/avis/detail/${r.idweb}` : 'https://www.boamp.fr'
+        }))
+        .filter(r => r.title);
     }
   },
   {
@@ -81,21 +76,22 @@ const SOURCES = [
     url: 'https://www.marches-publics.gouv.fr',
     search: async (query) => {
       const encoded = encodeURIComponent(query);
-      const url = `https://www.marches-publics.gouv.fr/index.php?page=entreprise.EntrepriseAdvancedSearch&AllCons&id_lot=0&y=0&texte=${encoded}`;
-      try {
-        const html = await fetchHtml(url);
-        const cheerio = require('cheerio');
-        const $ = cheerio.load(html);
-        const results = [];
-        $('tr.tableRegular, .dce-item, .result-row').each((i, el) => {
-          if (i >= 10) return false;
-          const title = $(el).find('td:nth-child(2), .objet, h3').first().text().trim();
-          const date = $(el).find('td:nth-child(4), .date').first().text().trim();
-          const href = $(el).find('a').first().attr('href');
-          if (title) results.push({ title, desc: '', date, url: href ? (href.startsWith('http') ? href : 'https://www.marches-publics.gouv.fr' + href) : url });
+      const url = `https://www.marches-publics.gouv.fr/?page=entreprise.EntrepriseAdvancedSearch&AllCons&id_lot=0&y=0&texte=${encoded}`;
+      const html = await fetchHtml(url);
+      const cheerio = require('cheerio');
+      const $ = cheerio.load(html);
+      const results = [];
+      $('tr.tableRegular, .dce-item, .result-row, li.resultat, .avis-item').each((i, el) => {
+        if (i >= 10) return false;
+        const title = $(el).find('td:nth-child(2), .objet, h3, .libelle, a').first().text().trim();
+        const date = $(el).find('td:nth-child(4), .date, time').first().text().trim();
+        const href = $(el).find('a').first().attr('href');
+        if (title && title.length > 5) results.push({
+          title, desc: '', date,
+          url: href ? (href.startsWith('http') ? href : 'https://www.marches-publics.gouv.fr' + href) : url
         });
-        return results;
-      } catch (e) { return []; }
+      });
+      return results;
     }
   },
   {
@@ -105,22 +101,19 @@ const SOURCES = [
     description: 'Tenders Electronic Daily — Marchés européens',
     url: 'https://ted.europa.eu',
     search: async (query) => {
-      const encoded = encodeURIComponent(query);
-      const apiUrl = `https://ted.europa.eu/api/v2.0/notices/search?fields=ND,TI,PD,MA,IA,CY&q=LANG:FR AND (${encoded})&scope=3&limit=10&sortField=ND&sortOrder=DESC`;
-      try {
-        const data = await fetchJson(apiUrl);
-        const results = [];
-        const notices = data?.results || data?.notices || [];
-        notices.forEach(n => {
-          results.push({
-            title: n.TI || n.title || 'Avis TED',
-            desc: n.IA || n.subject || '',
-            date: n.PD || n.publicationDate || '',
-            url: `https://ted.europa.eu/udl?uri=TED:NOTICE:${n.ND || ''}:TEXT:FR:HTML`
-          });
-        });
-        return results;
-      } catch (e) { return []; }
+      // Le paramètre q entier doit être encodé (espace et parenthèses inclus)
+      const q = encodeURIComponent(`LANG:FR AND (${query})`);
+      const apiUrl = `https://ted.europa.eu/api/v2.0/notices/search?fields=ND,TI,PD,MA,IA,CY&q=${q}&scope=3&limit=10&sortField=ND&sortOrder=DESC`;
+      const data = await fetchJson(apiUrl);
+      const notices = data.results || data.notices || [];
+      return notices
+        .map(n => ({
+          title: n.TI || n.title || 'Avis TED',
+          desc: n.IA || n.subject || '',
+          date: n.PD || n.publicationDate || '',
+          url: n.ND ? `https://ted.europa.eu/udl?uri=TED:NOTICE:${n.ND}:TEXT:FR:HTML` : 'https://ted.europa.eu'
+        }))
+        .filter(r => r.title);
     }
   },
   {
@@ -131,20 +124,21 @@ const SOURCES = [
     url: 'https://www.maximilien.fr',
     search: async (query) => {
       const encoded = encodeURIComponent(query);
-      const url = `https://www.maximilien.fr/index.php?page=entreprise.EntrepriseAdvancedSearch&texte=${encoded}`;
-      try {
-        const html = await fetchHtml(url);
-        const cheerio = require('cheerio');
-        const $ = cheerio.load(html);
-        const results = [];
-        $('tr.tableRegular, .result-item').each((i, el) => {
-          if (i >= 8) return false;
-          const title = $(el).find('td:nth-child(2), .objet').first().text().trim();
-          const href = $(el).find('a').first().attr('href');
-          if (title) results.push({ title, desc: '', date: '', url: href ? (href.startsWith('http') ? href : 'https://www.maximilien.fr' + href) : url });
+      const url = `https://www.maximilien.fr/index.php?page=entreprise.EntrepriseAdvancedSearch&AllCons&id_lot=0&y=0&texte=${encoded}`;
+      const html = await fetchHtml(url);
+      const cheerio = require('cheerio');
+      const $ = cheerio.load(html);
+      const results = [];
+      $('tr.tableRegular, tr.odd, tr.even, .result-item').each((i, el) => {
+        if (i >= 8) return false;
+        const title = $(el).find('td:nth-child(2), .objet, td a').first().text().trim();
+        const href = $(el).find('a').first().attr('href');
+        if (title && title.length > 5) results.push({
+          title, desc: '', date: '',
+          url: href ? (href.startsWith('http') ? href : 'https://www.maximilien.fr' + href) : url
         });
-        return results;
-      } catch (e) { return []; }
+      });
+      return results;
     }
   },
   {
@@ -155,21 +149,21 @@ const SOURCES = [
     url: 'https://www.achatpublic.com',
     search: async (query) => {
       const encoded = encodeURIComponent(query);
-      const url = `https://www.achatpublic.com/sdm/ent/gen/ent_detail.do?PCSLID=CSL_2024_${encoded}`;
-      try {
-        const html = await fetchHtml(`https://www.achatpublic.com/recherche-marches?q=${encoded}`);
-        const cheerio = require('cheerio');
-        const $ = cheerio.load(html);
-        const results = [];
-        $('.avis, .result, .marche-item, article').each((i, el) => {
-          if (i >= 8) return false;
-          const title = $(el).find('h2, h3, .title').first().text().trim();
-          const desc = $(el).find('p, .objet').first().text().trim();
-          const href = $(el).find('a').first().attr('href');
-          if (title) results.push({ title, desc, date: '', url: href ? (href.startsWith('http') ? href : 'https://www.achatpublic.com' + href) : 'https://www.achatpublic.com' });
+      const html = await fetchHtml(`https://www.achatpublic.com/recherche-marches?q=${encoded}`);
+      const cheerio = require('cheerio');
+      const $ = cheerio.load(html);
+      const results = [];
+      $('.avis, .result, .marche-item, article, .annonce').each((i, el) => {
+        if (i >= 8) return false;
+        const title = $(el).find('h2, h3, .title, a').first().text().trim();
+        const desc = $(el).find('p, .objet').first().text().trim();
+        const href = $(el).find('a').first().attr('href');
+        if (title && title.length > 5) results.push({
+          title, desc, date: '',
+          url: href ? (href.startsWith('http') ? href : 'https://www.achatpublic.com' + href) : 'https://www.achatpublic.com'
         });
-        return results;
-      } catch (e) { return []; }
+      });
+      return results;
     }
   },
   {
@@ -180,46 +174,52 @@ const SOURCES = [
     url: 'https://www.marches-publics.info',
     search: async (query) => {
       const encoded = encodeURIComponent(query);
-      const url = `https://www.marches-publics.info/index.php?page=entreprise.EntrepriseAdvancedSearch&texte=${encoded}`;
-      try {
-        const html = await fetchHtml(url);
-        const cheerio = require('cheerio');
-        const $ = cheerio.load(html);
-        const results = [];
-        $('tr.tableRegular').each((i, el) => {
-          if (i >= 8) return false;
-          const title = $(el).find('td:nth-child(2)').text().trim();
-          const href = $(el).find('a').first().attr('href');
-          if (title) results.push({ title, desc: '', date: '', url: href ? (href.startsWith('http') ? href : 'https://www.marches-publics.info' + href) : url });
+      const url = `https://www.marches-publics.info/index.php?page=entreprise.EntrepriseAdvancedSearch&AllCons&id_lot=0&y=0&texte=${encoded}`;
+      const html = await fetchHtml(url);
+      const cheerio = require('cheerio');
+      const $ = cheerio.load(html);
+      const results = [];
+      $('tr.tableRegular, tr.odd, tr.even').each((i, el) => {
+        if (i >= 8) return false;
+        const title = $(el).find('td:nth-child(2), td a').first().text().trim();
+        const href = $(el).find('a').first().attr('href');
+        if (title && title.length > 5) results.push({
+          title, desc: '', date: '',
+          url: href ? (href.startsWith('http') ? href : 'https://www.marches-publics.info' + href) : url
         });
-        return results;
-      } catch (e) { return []; }
+      });
+      return results;
     }
   }
 ];
 
 // ─── HTTP helpers ────────────────────────────────────────────────────────────
-function fetchHtml(url, timeout = 12000) {
+function fetchHtml(url, timeout = 15000) {
   return new Promise((resolve, reject) => {
     const parsed = new URL(url);
     const lib = parsed.protocol === 'https:' ? https : http;
     const req = lib.get(url, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml',
-        'Accept-Language': 'fr-FR,fr;q=0.9'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'fr-FR,fr;q=0.9,en;q=0.8'
       },
       timeout
     }, (res) => {
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        res.resume();
         return fetchHtml(res.headers.location, timeout).then(resolve).catch(reject);
+      }
+      if (res.statusCode >= 400) {
+        res.resume();
+        return reject(new Error(`HTTP ${res.statusCode}`));
       }
       let data = '';
       res.on('data', chunk => data += chunk);
       res.on('end', () => resolve(data));
     });
     req.on('error', reject);
-    req.on('timeout', () => { req.destroy(); reject(new Error('timeout')); });
+    req.on('timeout', () => { req.destroy(); reject(new Error('Timeout')); });
   });
 }
 
