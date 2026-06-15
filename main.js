@@ -82,7 +82,7 @@ const SOURCES = [
     search: async (query) => {
       const encoded = encodeURIComponent(query);
       // API OpenDataSoft officielle BOAMP — fiable et sans scraping
-      const url = `https://boamp-datadila.opendatasoft.com/api/explore/v2.1/catalog/datasets/boamp/records?q=${encoded}&limit=20&order_by=dateparution%20desc`;
+      const url = `https://boamp-datadila.opendatasoft.com/api/explore/v2.1/catalog/datasets/boamp/records?q=${encoded}&limit=50&order_by=dateparution%20desc`;
       const data = await fetchJson(url);
       return (data.results || [])
         .map(r => ({
@@ -143,7 +143,7 @@ const SOURCES = [
         title: getStr(n.TI) || 'Avis TED',
         desc: getStr(n.MA) || '',
         date: getStr(n.PD).slice(0, 10),
-        url: getStr(n.ND) ? `https://ted.europa.eu/udl?uri=TED:NOTICE:${getStr(n.ND)}:TEXT:FR:HTML` : 'https://ted.europa.eu'
+        url: getStr(n.ND) ? `https://ted.europa.eu/en/notice/-/detail/${getStr(n.ND)}` : 'https://ted.europa.eu'
       })).filter(r => r.title && r.title !== 'Avis TED');
     }
   },
@@ -282,24 +282,24 @@ const SOURCES = [
     url: 'https://www.marchesonline.com',
     search: async (query) => {
       const encoded = encodeURIComponent(query);
-      // Marchés Online : paramètre de recherche "mots" ou "q"
       const url = `https://www.marchesonline.com/appels-offres/en-cours?mots=${encoded}`;
       const html = await fetchHtml(url);
       const cheerio = require('cheerio');
       const $ = cheerio.load(html);
       const results = [];
-      // Sélecteurs pour Marchés Online (SSR, liste d'avis)
-      $('article, li, .appel, .ao, .offre, tr, [class*="ao-"], [class*="appel"]').each((i, el) => {
+      // Pages à exclure explicitement (navigation, abonnement, etc.)
+      const BANNED_PATHS = ['/nous-connaitre', '/abonnement', '/connexion', '/pack', '/faq', '/contact', '/cgu', '/rgpd', '/presse', '/partenaires', '/offre-'];
+      $('article, .ao-item, [class*="ao-item"], [class*="appel-item"], .result-ao, tr.ao').each((i, el) => {
         if (i >= 20) return false;
-        const linkEl = $(el).find('a').first();
-        const title = linkEl.text().trim() || $(el).find('h2, h3, strong, .title').first().text().trim();
-        const desc  = $(el).find('.organisme, .acheteur, .ref, td:nth-child(2), p').first().text().trim();
-        const date  = $(el).find('.date, time, td:nth-child(1), .pub').first().text().trim();
-        const href  = linkEl.attr('href');
-        const link  = href ? (href.startsWith('http') ? href : 'https://www.marchesonline.com' + href) : url;
-        if (title && title.length > 8 && !title.includes('Connexion') && !title.includes('Abonnement')) {
-          results.push({ title, desc, date, url: link });
-        }
+        const linkEl = $(el).find('a[href]').first();
+        const href = linkEl.attr('href') || '';
+        const fullHref = href.startsWith('http') ? href : 'https://www.marchesonline.com' + href;
+        if (!href || href === '/' || href.startsWith('#')) return;
+        if (BANNED_PATHS.some(p => href.includes(p))) return;
+        const title = linkEl.text().trim() || $(el).find('h2, h3, strong').first().text().trim();
+        const desc  = $(el).find('.organisme, .acheteur, p').first().text().trim();
+        const date  = $(el).find('.date, time, .pub').first().text().trim();
+        if (title && title.length > 8) results.push({ title, desc, date, url: fullHref });
       });
       return results;
     }
@@ -340,7 +340,7 @@ const SOURCES = [
     url: 'https://www.boamp.fr',
     search: async (query) => {
       const encoded = encodeURIComponent(query);
-      const url = `https://boamp-datadila.opendatasoft.com/api/explore/v2.1/catalog/datasets/boamp/records?q=${encoded}&where=nature%3D%22ATTRIBUTION%22&limit=20&order_by=dateparution%20desc`;
+      const url = `https://boamp-datadila.opendatasoft.com/api/explore/v2.1/catalog/datasets/boamp/records?q=${encoded}&where=nature%3D%22ATTRIBUTION%22&limit=50&order_by=dateparution%20desc`;
       const data = await fetchJson(url);
       return (data.results || [])
         .map(r => ({
@@ -490,33 +490,66 @@ ipcMain.handle('search-source', async (_, { sourceId, query }) => {
 });
 
 ipcMain.handle('analyze-with-ai', async (_, { aiConfig, query, results }) => {
-  const systemPrompt = `Tu es un expert en marchés publics français et européens. 
-Tu analyses des annonces de marchés publics et tu identifies celles qui correspondent aux besoins de l'utilisateur.
-Pour chaque résultat pertinent, tu expliques pourquoi il correspond et tu donnes un score de pertinence de 0 à 100.
-Réponds en JSON avec ce format exact:
+  const systemPrompt = `Tu es un expert en marchés publics français et européens spécialisé dans l'analyse de pertinence.
+
+## MISSION
+Analyser des annonces de marchés publics et les noter selon leur correspondance avec les critères de l'utilisateur. Tu dois noter TOUS les résultats, même ceux à 0.
+
+## CRITÈRES D'ÉVALUATION (par ordre de priorité)
+
+### 1. Zone géographique — CRITIQUE
+Si l'utilisateur mentionne une ville, région, département ou code postal :
+- Correspondance confirmée dans l'annonce → score normal
+- Zone non mentionnée dans l'annonce (impossible à vérifier) → score max 50
+- Zone différente confirmée dans l'annonce → score 0 à 10 maximum, toujours
+
+### 2. Objet / domaine
+Le marché doit correspondre au secteur ou à l'objet recherché.
+- Correspondance exacte → +40 pts
+- Domaine proche → +20 pts
+- Hors-sujet → 0
+
+### 3. Validité de l'annonce
+- URL qui semble être une page "à propos", "connexion", "abonnement", "sources d'information" ou toute page non-marché → score 0
+- Annonce active et récente → +10 pts
+- Annonce ancienne ou attribution → neutre
+
+## GRILLE DE SCORES
+- 80–100 : Correspond à TOUS les critères (zone + objet + valide)
+- 60–79 : Bon objet, zone probable ou non précisée
+- 40–59 : Objet correct, zone douteuse
+- 20–39 : Partiellement lié
+- 0–19 : Hors zone confirmé, hors-sujet, ou lien invalide
+
+## FORMAT DE RÉPONSE (JSON strict, aucun texte avant ou après)
 {
-  "summary": "résumé général de la recherche",
+  "summary": "2-3 phrases sur la qualité et la pertinence des résultats pour cette recherche",
   "relevant": [
-    {
-      "index": 0,
-      "score": 85,
-      "reason": "raison de pertinence",
-      "highlights": ["point clé 1", "point clé 2"]
-    }
+    { "index": 0, "score": 85, "reason": "raison courte et précise", "highlights": ["point 1", "point 2"] }
   ],
-  "recommendations": "conseils pour affiner la recherche"
-}`;
+  "recommendations": "conseils concrets pour affiner la recherche (zone, mots-clés CPV, etc.)"
+}
 
-  const userPrompt = `L'utilisateur cherche: "${query}"
+Inclus TOUS les index dans "relevant" (même score 0) pour permettre un tri complet.`;
 
-Voici les marchés publics trouvés (${results.length} résultats au total):
-${results.map((r, i) => `[${i}] SOURCE: ${r.sourceName}
-Titre: ${r.title}
-Description: ${r.desc || 'N/A'}
-Date: ${r.date || 'N/A'}
-URL: ${r.url}`).join('\n\n')}
+  // Détection de zones géographiques dans la requête
+  const geoPattern = /\b(Paris|Lyon|Marseille|Toulouse|Bordeaux|Lille|Nantes|Strasbourg|Montpellier|Rennes|Reims|Nice|Rouen|Grenoble|Dijon|Angers|Nîmes|Toulon|Brest|Amiens|Tours|Limoges|Le Mans|Metz|Besançon|Orléans|Mulhouse|Caen|Nancy|Argenteuil|Montreuil|Saint-Denis|Île-de-France|Bretagne|Normandie|Occitanie|PACA|Provence|Nouvelle-Aquitaine|Hauts-de-France|Grand Est|Auvergne|Rhône-Alpes|Centre-Val de Loire|Bourgogne|Franche-Comté|Pays de la Loire|Corse|\b[0-9]{5}\b|\b[0-9]{2}\b)\b/gi;
+  const geoMatches = [...new Set((query.match(geoPattern) || []).map(s => s.trim()))];
+  const geoWarning = geoMatches.length > 0
+    ? `\n⚠️ ZONE GÉOGRAPHIQUE DÉTECTÉE: ${geoMatches.join(', ')} — tout résultat clairement hors de cette zone doit recevoir score ≤ 10.`
+    : '';
 
-Analyse ces résultats et identifie ceux qui correspondent à la recherche.`;
+  const userPrompt = `Requête utilisateur: "${query}"${geoWarning}
+
+Analyse ces ${results.length} résultats. Note CHAQUE index de 0 à ${results.length - 1} dans "relevant".
+
+${results.map((r, i) => `[${i}] ${r.sourceName}
+  Titre: ${r.title}
+  Desc: ${r.desc || '—'}
+  Date: ${r.date || '—'}
+  URL: ${r.url}`).join('\n\n')}
+
+Réponds uniquement en JSON valide.`;
 
   try {
     const response = await callAI(aiConfig, systemPrompt, userPrompt);

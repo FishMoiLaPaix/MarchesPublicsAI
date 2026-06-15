@@ -1152,7 +1152,9 @@ async function runSearch(query, selected, aiConfig) {
       badge.innerHTML = `<div class="dot"></div>${s?.name || sourceId} (0)`;
     } else {
       badge.className = 'source-badge done';
-      badge.innerHTML = `<div class="dot"></div>${s?.name || sourceId} (${result.results.length})`;
+      const cnt = result.results.length;
+      const cntLabel = cnt >= 20 ? `${cnt}+` : cnt;
+      badge.innerHTML = `<div class="dot"></div>${s?.name || sourceId} (${cntLabel})`;
       result.results.forEach(r => allResults.push({ ...r, sourceId, sourceName: s?.name || sourceId }));
     }
   });
@@ -1233,15 +1235,25 @@ function renderResults(results, analysis) {
   // If AI: show "Recommandés" group first
   if (analysis?.relevant && analysis.relevant.length > 0) {
     const recommended = sorted.filter(r => r._rel?.score >= 60);
+    const excluded    = sorted.filter(r => r._rel && r._rel.score > 0 && r._rel.score < 60);
+    const offTopic    = sorted.filter(r => r._rel && r._rel.score === 0);
+    const unscored    = sorted.filter(r => !r._rel);
+
     if (recommended.length > 0) {
       addGroupHeader(grid, '⭐ Recommandés par l\'IA', recommended.length);
       recommended.forEach(r => grid.appendChild(makeCard(r, true)));
     }
-
-    const others = sorted.filter(r => !r._rel || r._rel.score < 60);
-    if (others.length > 0) {
-      addGroupHeader(grid, 'Autres résultats', others.length);
-      others.forEach(r => grid.appendChild(makeCard(r, false)));
+    if (excluded.length > 0) {
+      addGroupHeader(grid, 'Partiellement pertinents', excluded.length);
+      excluded.forEach(r => grid.appendChild(makeCard(r, false)));
+    }
+    if (offTopic.length > 0) {
+      addGroupHeader(grid, 'Hors critères (mauvaise zone, hors-sujet)', offTopic.length);
+      offTopic.forEach(r => grid.appendChild(makeCard(r, false)));
+    }
+    if (unscored.length > 0) {
+      addGroupHeader(grid, 'Non analysés', unscored.length);
+      unscored.forEach(r => grid.appendChild(makeCard(r, false)));
     }
   } else {
     // Group by source
