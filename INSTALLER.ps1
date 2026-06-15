@@ -55,8 +55,9 @@ Set-Location $AppDir
 
 if (-not (Test-Path "$AppDir\node_modules\electron")) {
     Write-Host "  Installation des dependances (premiere fois ~2 min)..." -ForegroundColor Cyan
-    npm install --save-dev electron 2>&1 | Out-Null
-    npm install axios cheerio 2>&1 | Out-Null
+    $env:NPM_CONFIG_LOGLEVEL = "error"
+    cmd /c "npm install --save-dev electron --loglevel=error 2>nul"
+    cmd /c "npm install axios cheerio --loglevel=error 2>nul"
     Write-Host "  OK Dependances installees" -ForegroundColor Green
 } else {
     Write-Host "  OK Dependances deja installees" -ForegroundColor Green
