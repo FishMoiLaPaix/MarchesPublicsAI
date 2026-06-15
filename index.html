@@ -1,0 +1,1097 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MarchésPublics AI</title>
+<style>
+  :root {
+    --bg: #0a0f1e;
+    --bg2: #0d1426;
+    --bg3: #111827;
+    --surface: #161d30;
+    --surface2: #1c2540;
+    --border: #1e2d4a;
+    --border2: #243354;
+    --blue: #4a9eff;
+    --blue2: #2979d9;
+    --blue-glow: rgba(74,158,255,0.15);
+    --cyan: #00e5ff;
+    --green: #00e676;
+    --green2: #1b5e20;
+    --orange: #ff9800;
+    --red: #ff5252;
+    --text: #e8edf5;
+    --text2: #8fa3c0;
+    --text3: #4d6480;
+    --radius: 10px;
+    --radius-sm: 6px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  
+  body {
+    font-family: 'Segoe UI', -apple-system, system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── Titlebar ── */
+  .titlebar {
+    height: 38px;
+    background: var(--bg);
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    -webkit-app-region: drag;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .titlebar-logo {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--blue);
+    letter-spacing: 0.5px;
+  }
+  .titlebar-logo svg { width: 18px; height: 18px; }
+
+  /* ── Layout ── */
+  .app {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* ── Sidebar ── */
+  .sidebar {
+    width: 260px;
+    background: var(--bg2);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    overflow: hidden;
+  }
+
+  .sidebar-section {
+    padding: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .sidebar-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--text3);
+    margin-bottom: 10px;
+  }
+
+  /* AI Config */
+  .ai-provider-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+  .provider-btn {
+    padding: 7px 4px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text2);
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.15s;
+  }
+  .provider-btn:hover { border-color: var(--blue); color: var(--blue); }
+  .provider-btn.active { background: var(--blue-glow); border-color: var(--blue); color: var(--blue); }
+
+  .input-group { margin-bottom: 8px; }
+  .input-label { font-size: 11px; color: var(--text3); margin-bottom: 4px; display: block; }
+  .input-field {
+    width: 100%;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 7px 10px;
+    color: var(--text);
+    font-size: 12px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .input-field:focus { border-color: var(--blue); }
+  .input-field::placeholder { color: var(--text3); }
+
+  .test-btn {
+    width: 100%;
+    padding: 7px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text2);
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+  .test-btn:hover { border-color: var(--blue); color: var(--blue); }
+  .test-status { font-size: 10px; margin-top: 6px; text-align: center; }
+  .test-status.ok { color: var(--green); }
+  .test-status.err { color: var(--red); }
+
+  /* Sources list */
+  .sources-list { flex: 1; overflow-y: auto; padding: 8px; }
+  .source-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 10px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    margin-bottom: 3px;
+    transition: background 0.1s;
+  }
+  .source-item:hover { background: var(--surface); }
+  .source-checkbox {
+    width: 16px; height: 16px;
+    border: 2px solid var(--border2);
+    border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    transition: all 0.15s;
+  }
+  .source-checkbox.checked { background: var(--blue); border-color: var(--blue); }
+  .source-checkbox.checked::after { content: '✓'; color: white; font-size: 10px; font-weight: 700; }
+  .source-info { flex: 1; min-width: 0; }
+  .source-name { font-size: 12px; font-weight: 600; color: var(--text); }
+  .source-desc { font-size: 10px; color: var(--text3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .source-flag { font-size: 14px; }
+
+  .select-all-btn {
+    width: calc(100% - 16px);
+    margin: 4px 8px 8px;
+    padding: 6px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text3);
+    font-size: 10px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .select-all-btn:hover { border-color: var(--blue); color: var(--blue); }
+
+  /* ── Main ── */
+  .main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* Search bar */
+  .search-area {
+    padding: 20px 24px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg2);
+    flex-shrink: 0;
+  }
+
+  .search-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+
+  .search-input-wrap {
+    flex: 1;
+    position: relative;
+  }
+  .search-input-wrap svg {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text3);
+    pointer-events: none;
+  }
+  .search-input {
+    width: 100%;
+    background: var(--bg3);
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 14px 12px 42px;
+    color: var(--text);
+    font-size: 15px;
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .search-input:focus {
+    border-color: var(--blue);
+    box-shadow: 0 0 0 3px var(--blue-glow);
+  }
+  .search-input::placeholder { color: var(--text3); }
+
+  .search-btn {
+    padding: 12px 24px;
+    background: var(--blue);
+    border: none;
+    border-radius: var(--radius);
+    color: white;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.15s;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .search-btn:hover { background: var(--blue2); transform: translateY(-1px); }
+  .search-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+  .search-btn.analyzing { background: #7c3aed; }
+
+  .search-meta {
+    display: flex;
+    gap: 16px;
+    margin-top: 10px;
+    align-items: center;
+  }
+  .ai-analyze-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .toggle {
+    width: 34px; height: 18px;
+    background: var(--border);
+    border-radius: 9px;
+    position: relative;
+    transition: background 0.2s;
+  }
+  .toggle::after {
+    content: '';
+    position: absolute;
+    top: 2px; left: 2px;
+    width: 14px; height: 14px;
+    background: white;
+    border-radius: 50%;
+    transition: transform 0.2s;
+  }
+  .toggle.on { background: var(--blue); }
+  .toggle.on::after { transform: translateX(16px); }
+  .toggle-label { font-size: 12px; color: var(--text2); }
+
+  .result-count { font-size: 12px; color: var(--text3); margin-left: auto; }
+
+  /* ── Results area ── */
+  .results-area {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 24px;
+  }
+
+  /* Welcome state */
+  .welcome {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    gap: 16px;
+    text-align: center;
+    color: var(--text3);
+  }
+  .welcome-icon { font-size: 48px; opacity: 0.4; }
+  .welcome h2 { font-size: 20px; color: var(--text2); font-weight: 500; }
+  .welcome p { font-size: 13px; max-width: 400px; line-height: 1.6; }
+
+  /* Progress */
+  .progress-wrap {
+    display: none;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .progress-wrap.visible { display: flex; }
+  .progress-title { font-size: 13px; color: var(--text2); }
+  .source-statuses { display: flex; flex-wrap: wrap; gap: 8px; }
+  .source-badge {
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+    border: 1px solid var(--border);
+    color: var(--text3);
+    background: var(--surface);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    transition: all 0.2s;
+  }
+  .source-badge.loading { border-color: var(--orange); color: var(--orange); }
+  .source-badge.done { border-color: var(--green); color: var(--green); }
+  .source-badge.error { border-color: var(--red); color: var(--red); }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .dot.spin { animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+  /* AI Analysis panel */
+  .ai-panel {
+    background: linear-gradient(135deg, #1a0a2e 0%, #0d1426 100%);
+    border: 1px solid #3d1d6e;
+    border-radius: var(--radius);
+    padding: 16px;
+    margin-bottom: 20px;
+    display: none;
+  }
+  .ai-panel.visible { display: block; }
+  .ai-panel-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .ai-panel-icon { font-size: 18px; }
+  .ai-panel-title { font-size: 13px; font-weight: 700; color: #b39ddb; }
+  .ai-summary { font-size: 13px; color: var(--text2); line-height: 1.6; margin-bottom: 12px; }
+  .ai-rec { font-size: 12px; color: #9575cd; font-style: italic; }
+
+  /* Results grid */
+  .results-grid { display: flex; flex-direction: column; gap: 10px; }
+
+  .result-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    cursor: pointer;
+    transition: all 0.15s;
+    position: relative;
+  }
+  .result-card:hover { border-color: var(--blue); background: var(--surface2); transform: translateX(2px); }
+  .result-card.highlighted { border-color: #7c3aed; background: #1a0a2e22; }
+  .result-card.highlighted::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+    background: #7c3aed;
+    border-radius: 3px 0 0 3px;
+  }
+
+  .card-top {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 8px;
+  }
+  .card-source {
+    padding: 3px 8px;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text3);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .card-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    line-height: 1.4;
+    flex: 1;
+  }
+
+  .card-score {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  .score-bar {
+    width: 40px; height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .score-fill { height: 100%; border-radius: 2px; transition: width 0.3s; }
+
+  .card-desc {
+    font-size: 12px;
+    color: var(--text2);
+    line-height: 1.5;
+    margin-bottom: 8px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .card-ai-reason {
+    font-size: 11px;
+    color: #9575cd;
+    background: #1a0a2e;
+    border-left: 2px solid #7c3aed;
+    padding: 6px 10px;
+    border-radius: 0 4px 4px 0;
+    margin-bottom: 8px;
+    line-height: 1.4;
+  }
+  .card-highlights {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-bottom: 8px;
+  }
+  .highlight-tag {
+    padding: 2px 8px;
+    background: rgba(74,158,255,0.1);
+    border: 1px solid rgba(74,158,255,0.2);
+    border-radius: 12px;
+    font-size: 10px;
+    color: var(--blue);
+  }
+  .card-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .card-date { font-size: 11px; color: var(--text3); }
+  .card-link {
+    font-size: 11px;
+    color: var(--blue);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    text-decoration: none;
+  }
+
+  /* Group headers */
+  .group-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+    margin-top: 6px;
+  }
+  .group-title { font-size: 12px; font-weight: 700; color: var(--text3); text-transform: uppercase; letter-spacing: 1px; }
+  .group-line { flex: 1; height: 1px; background: var(--border); }
+  .group-count {
+    font-size: 10px;
+    color: var(--text3);
+    background: var(--surface);
+    padding: 2px 8px;
+    border-radius: 10px;
+  }
+
+  /* No results */
+  .no-results {
+    text-align: center;
+    padding: 40px;
+    color: var(--text3);
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--border2); }
+
+  /* Modal */
+  .modal-overlay {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.7);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal {
+    background: var(--bg2);
+    border: 1px solid var(--border2);
+    border-radius: 14px;
+    padding: 28px;
+    width: 500px;
+    max-width: 90vw;
+  }
+  .modal h2 { font-size: 18px; margin-bottom: 6px; }
+  .modal p { font-size: 13px; color: var(--text2); margin-bottom: 20px; line-height: 1.5; }
+  .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+  .btn-primary {
+    padding: 9px 20px;
+    background: var(--blue);
+    border: none;
+    border-radius: var(--radius-sm);
+    color: white;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .btn-secondary {
+    padding: 9px 20px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text2);
+    font-size: 13px;
+    cursor: pointer;
+  }
+
+  /* Spinner */
+  .spinner {
+    width: 16px; height: 16px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: rotate 0.7s linear infinite;
+    display: none;
+  }
+  .spinner.show { display: block; }
+  @keyframes rotate { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<div class="titlebar">
+  <div class="titlebar-logo">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+    </svg>
+    MarchésPublics AI
+  </div>
+</div>
+
+<div class="app">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+
+    <!-- AI Config -->
+    <div class="sidebar-section">
+      <div class="sidebar-label">Intelligence Artificielle</div>
+      <div class="ai-provider-grid">
+        <button class="provider-btn active" data-provider="anthropic">Claude</button>
+        <button class="provider-btn" data-provider="openai">OpenAI</button>
+        <button class="provider-btn" data-provider="mistral">Mistral</button>
+        <button class="provider-btn" data-provider="ollama">Ollama</button>
+        <button class="provider-btn" data-provider="custom" style="grid-column:1/-1">Custom Endpoint</button>
+      </div>
+
+      <div class="input-group" id="group-apikey">
+        <label class="input-label">Clé API</label>
+        <input type="password" class="input-field" id="api-key" placeholder="sk-ant-..." />
+      </div>
+
+      <div class="input-group" id="group-endpoint" style="display:none">
+        <label class="input-label">Endpoint URL</label>
+        <input type="text" class="input-field" id="api-endpoint" placeholder="https://api.exemple.com/v1/chat/completions" />
+      </div>
+
+      <div class="input-group">
+        <label class="input-label">Modèle (optionnel)</label>
+        <input type="text" class="input-field" id="api-model" placeholder="claude-opus-4-6" />
+      </div>
+
+      <button class="test-btn" id="test-ai-btn">
+        <div class="spinner" id="test-spinner"></div>
+        <span>Tester la connexion</span>
+      </button>
+      <div class="test-status" id="test-status"></div>
+    </div>
+
+    <!-- Sources -->
+    <div class="sidebar-label" style="padding: 12px 16px 4px; border-bottom: none;">
+      Sources
+    </div>
+    <button class="select-all-btn" id="select-all-btn">✓ Tout sélectionner</button>
+    <div class="sources-list" id="sources-list"></div>
+
+  </aside>
+
+  <!-- Main -->
+  <main class="main">
+
+    <!-- Search -->
+    <div class="search-area">
+      <div class="search-row">
+        <div class="search-input-wrap">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+          </svg>
+          <input type="text" class="search-input" id="search-input" placeholder="Ex: développement logiciel, travaux de voirie, fournitures informatiques..." />
+        </div>
+        <button class="search-btn" id="search-btn">
+          <div class="spinner" id="search-spinner"></div>
+          <span id="search-btn-text">Rechercher</span>
+        </button>
+      </div>
+      <div class="search-meta">
+        <label class="ai-analyze-toggle" id="ai-toggle">
+          <div class="toggle on" id="ai-toggle-el"></div>
+          <span class="toggle-label">Analyse IA</span>
+        </label>
+        <span class="result-count" id="result-count"></span>
+      </div>
+    </div>
+
+    <!-- Results -->
+    <div class="results-area" id="results-area">
+      <div class="welcome" id="welcome-state">
+        <div class="welcome-icon">🏛️</div>
+        <h2>Recherche dans les marchés publics</h2>
+        <p>Configurez votre IA dans le panneau gauche, sélectionnez les sources à explorer, puis lancez votre recherche.</p>
+      </div>
+
+      <div class="progress-wrap" id="progress-wrap">
+        <div class="progress-title" id="progress-title">Recherche en cours…</div>
+        <div class="source-statuses" id="source-statuses"></div>
+      </div>
+
+      <div class="ai-panel" id="ai-panel">
+        <div class="ai-panel-header">
+          <div class="ai-panel-icon">🤖</div>
+          <div class="ai-panel-title">Analyse IA</div>
+        </div>
+        <div class="ai-summary" id="ai-summary"></div>
+        <div class="ai-rec" id="ai-rec"></div>
+      </div>
+
+      <div class="results-grid" id="results-grid"></div>
+    </div>
+
+  </main>
+</div>
+
+<!-- Modal erreur config IA -->
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal">
+    <h2>⚠️ Configuration IA requise</h2>
+    <p>Pour utiliser l'analyse intelligente, vous devez configurer un provider IA et saisir une clé API dans le panneau de gauche.</p>
+    <div class="modal-actions">
+      <button class="btn-secondary" id="modal-cancel">Recherche sans IA</button>
+      <button class="btn-primary" id="modal-config">Configurer maintenant</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── State ──────────────────────────────────────────────────────────────────
+let sources = [];
+let selectedSources = new Set();
+let currentProvider = 'anthropic';
+let aiEnabled = true;
+let allResults = [];
+let aiAnalysis = null;
+
+// ─── Init ────────────────────────────────────────────────────────────────────
+async function init() {
+  sources = await window.api.getSources();
+  renderSources();
+  sources.forEach(s => selectedSources.add(s.id));
+  updateSelectAll();
+
+  // Load saved config
+  const saved = loadConfig();
+  if (saved) {
+    currentProvider = saved.provider || 'anthropic';
+    document.getElementById('api-key').value = saved.apiKey || '';
+    document.getElementById('api-endpoint').value = saved.endpoint || '';
+    document.getElementById('api-model').value = saved.model || '';
+    updateProviderUI();
+  }
+}
+
+// ─── Config persist ───────────────────────────────────────────────────────────
+function saveConfig() {
+  const cfg = {
+    provider: currentProvider,
+    apiKey: document.getElementById('api-key').value,
+    endpoint: document.getElementById('api-endpoint').value,
+    model: document.getElementById('api-model').value
+  };
+  localStorage.setItem('ai-config', JSON.stringify(cfg));
+}
+
+function loadConfig() {
+  try { return JSON.parse(localStorage.getItem('ai-config')); } catch { return null; }
+}
+
+// ─── Provider UI ─────────────────────────────────────────────────────────────
+function updateProviderUI() {
+  document.querySelectorAll('.provider-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.provider === currentProvider);
+  });
+
+  const isCustom = currentProvider === 'custom';
+  const isOllama = currentProvider === 'ollama';
+  document.getElementById('group-apikey').style.display = (isOllama) ? 'none' : 'block';
+  document.getElementById('group-endpoint').style.display = (isCustom || isOllama) ? 'block' : 'none';
+
+  const placeholders = {
+    anthropic: 'sk-ant-...',
+    openai: 'sk-...',
+    mistral: 'votre clé Mistral',
+    ollama: '',
+    custom: 'votre clé API'
+  };
+  const modelPH = {
+    anthropic: 'claude-opus-4-6',
+    openai: 'gpt-4o',
+    mistral: 'mistral-large-latest',
+    ollama: 'llama3',
+    custom: 'model-name'
+  };
+  const endpointPH = {
+    ollama: 'http://localhost:11434/api/chat',
+    custom: 'https://api.exemple.com/v1/chat/completions'
+  };
+
+  document.getElementById('api-key').placeholder = placeholders[currentProvider] || '';
+  document.getElementById('api-model').placeholder = modelPH[currentProvider] || '';
+  if (endpointPH[currentProvider]) document.getElementById('api-endpoint').placeholder = endpointPH[currentProvider];
+}
+
+document.querySelectorAll('.provider-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    currentProvider = btn.dataset.provider;
+    updateProviderUI();
+    saveConfig();
+  });
+});
+
+['api-key','api-endpoint','api-model'].forEach(id => {
+  document.getElementById(id).addEventListener('input', saveConfig);
+});
+
+// ─── Test AI ─────────────────────────────────────────────────────────────────
+document.getElementById('test-ai-btn').addEventListener('click', async () => {
+  const spinner = document.getElementById('test-spinner');
+  const status = document.getElementById('test-status');
+  spinner.classList.add('show');
+  status.textContent = '';
+  status.className = 'test-status';
+
+  const result = await window.api.testAI(getAIConfig());
+  spinner.classList.remove('show');
+
+  if (result.success) {
+    status.textContent = '✓ Connexion réussie';
+    status.className = 'test-status ok';
+  } else {
+    status.textContent = '✗ ' + (result.error || 'Erreur inconnue');
+    status.className = 'test-status err';
+  }
+});
+
+function getAIConfig() {
+  return {
+    provider: currentProvider,
+    apiKey: document.getElementById('api-key').value.trim(),
+    endpoint: document.getElementById('api-endpoint').value.trim(),
+    model: document.getElementById('api-model').value.trim()
+  };
+}
+
+// ─── Sources ──────────────────────────────────────────────────────────────────
+function renderSources() {
+  const list = document.getElementById('sources-list');
+  list.innerHTML = '';
+  sources.forEach(s => {
+    const item = document.createElement('div');
+    item.className = 'source-item';
+    item.innerHTML = `
+      <div class="source-checkbox checked" id="cb-${s.id}"></div>
+      <span class="source-flag">${s.country}</span>
+      <div class="source-info">
+        <div class="source-name">${s.name}</div>
+        <div class="source-desc">${s.description}</div>
+      </div>
+    `;
+    item.addEventListener('click', () => toggleSource(s.id));
+    list.appendChild(item);
+  });
+}
+
+function toggleSource(id) {
+  if (selectedSources.has(id)) selectedSources.delete(id);
+  else selectedSources.add(id);
+  document.getElementById('cb-' + id)?.classList.toggle('checked', selectedSources.has(id));
+  updateSelectAll();
+}
+
+function updateSelectAll() {
+  const btn = document.getElementById('select-all-btn');
+  const allSelected = sources.every(s => selectedSources.has(s.id));
+  btn.textContent = allSelected ? '✗ Tout désélectionner' : '✓ Tout sélectionner';
+}
+
+document.getElementById('select-all-btn').addEventListener('click', () => {
+  const allSelected = sources.every(s => selectedSources.has(s.id));
+  sources.forEach(s => {
+    if (allSelected) selectedSources.delete(s.id);
+    else selectedSources.add(s.id);
+    document.getElementById('cb-' + s.id)?.classList.toggle('checked', !allSelected);
+  });
+  updateSelectAll();
+});
+
+// ─── AI toggle ───────────────────────────────────────────────────────────────
+document.getElementById('ai-toggle').addEventListener('click', () => {
+  aiEnabled = !aiEnabled;
+  document.getElementById('ai-toggle-el').classList.toggle('on', aiEnabled);
+});
+
+// ─── Search ───────────────────────────────────────────────────────────────────
+document.getElementById('search-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') document.getElementById('search-btn').click();
+});
+
+document.getElementById('search-btn').addEventListener('click', async () => {
+  const query = document.getElementById('search-input').value.trim();
+  if (!query) return;
+
+  const selected = [...selectedSources];
+  if (selected.length === 0) {
+    alert('Sélectionnez au moins une source.');
+    return;
+  }
+
+  const aiConfig = getAIConfig();
+  if (aiEnabled && !aiConfig.apiKey && currentProvider !== 'ollama') {
+    document.getElementById('modal-overlay').classList.add('show');
+    return;
+  }
+
+  await runSearch(query, selected, aiConfig);
+});
+
+async function runSearch(query, selected, aiConfig) {
+  // UI
+  document.getElementById('welcome-state').style.display = 'none';
+  document.getElementById('ai-panel').classList.remove('visible');
+  document.getElementById('results-grid').innerHTML = '';
+  document.getElementById('result-count').textContent = '';
+  document.getElementById('progress-wrap').classList.add('visible');
+  document.getElementById('progress-title').textContent = `Recherche dans ${selected.length} source(s)…`;
+
+  const searchBtn = document.getElementById('search-btn');
+  const spinner = document.getElementById('search-spinner');
+  searchBtn.disabled = true;
+  spinner.classList.add('show');
+
+  // Init badges
+  const statusEl = document.getElementById('source-statuses');
+  statusEl.innerHTML = '';
+  const badges = {};
+  selected.forEach(id => {
+    const s = sources.find(x => x.id === id);
+    const badge = document.createElement('div');
+    badge.className = 'source-badge loading';
+    badge.innerHTML = `<div class="dot spin"></div>${s?.name || id}`;
+    statusEl.appendChild(badge);
+    badges[id] = badge;
+  });
+
+  // Search all sources in parallel
+  allResults = [];
+  const searches = selected.map(async (sourceId) => {
+    const result = await window.api.searchSource({ sourceId, query });
+    const s = sources.find(x => x.id === sourceId);
+    const badge = badges[sourceId];
+
+    if (result.error || result.results.length === 0) {
+      badge.className = 'source-badge error';
+      badge.innerHTML = `<div class="dot"></div>${s?.name || sourceId} (0)`;
+    } else {
+      badge.className = 'source-badge done';
+      badge.innerHTML = `<div class="dot"></div>${s?.name || sourceId} (${result.results.length})`;
+      result.results.forEach(r => allResults.push({ ...r, sourceId, sourceName: s?.name || sourceId }));
+    }
+  });
+
+  await Promise.all(searches);
+
+  // Update count
+  document.getElementById('result-count').textContent = `${allResults.length} résultat(s) trouvé(s)`;
+  document.getElementById('progress-title').textContent = `${allResults.length} marchés trouvés`;
+
+  // AI Analysis
+  if (aiEnabled && allResults.length > 0) {
+    document.getElementById('progress-title').textContent = '🤖 Analyse IA en cours…';
+    searchBtn.textContent = '';
+    document.getElementById('search-btn').classList.add('analyzing');
+
+    const analysis = await window.api.analyzeWithAI({ aiConfig, query, results: allResults });
+    if (analysis.success) {
+      aiAnalysis = analysis.analysis;
+      renderAIPanel(aiAnalysis);
+    } else {
+      aiAnalysis = null;
+    }
+    document.getElementById('search-btn').classList.remove('analyzing');
+  } else {
+    aiAnalysis = null;
+  }
+
+  renderResults(allResults, aiAnalysis);
+
+  // Reset btn
+  spinner.classList.remove('show');
+  document.getElementById('search-btn-text').textContent = 'Rechercher';
+  searchBtn.disabled = false;
+  document.getElementById('progress-wrap').classList.remove('visible');
+}
+
+// ─── Render AI panel ─────────────────────────────────────────────────────────
+function renderAIPanel(analysis) {
+  if (!analysis) return;
+  document.getElementById('ai-summary').textContent = analysis.summary || '';
+  document.getElementById('ai-rec').textContent = analysis.recommendations ? '💡 ' + analysis.recommendations : '';
+  document.getElementById('ai-panel').classList.add('visible');
+}
+
+// ─── Render results ───────────────────────────────────────────────────────────
+function renderResults(results, analysis) {
+  const grid = document.getElementById('results-grid');
+  grid.innerHTML = '';
+
+  if (results.length === 0) {
+    grid.innerHTML = '<div class="no-results">Aucun résultat trouvé. Essayez des termes différents ou sélectionnez plus de sources.</div>';
+    return;
+  }
+
+  // Build relevance map from AI
+  const relevanceMap = {};
+  if (analysis?.relevant) {
+    analysis.relevant.forEach(r => { relevanceMap[r.index] = r; });
+  }
+
+  // Sort: relevant first if AI
+  let sorted = results.map((r, i) => ({ ...r, _idx: i, _rel: relevanceMap[i] }));
+  if (analysis?.relevant) {
+    sorted.sort((a, b) => {
+      const sa = a._rel?.score || 0;
+      const sb = b._rel?.score || 0;
+      return sb - sa;
+    });
+  }
+
+  // Group by source
+  const bySource = {};
+  sorted.forEach(r => {
+    if (!bySource[r.sourceName]) bySource[r.sourceName] = [];
+    bySource[r.sourceName].push(r);
+  });
+
+  // If AI: show "Recommandés" group first
+  if (analysis?.relevant && analysis.relevant.length > 0) {
+    const recommended = sorted.filter(r => r._rel?.score >= 60);
+    if (recommended.length > 0) {
+      addGroupHeader(grid, '⭐ Recommandés par l\'IA', recommended.length);
+      recommended.forEach(r => grid.appendChild(makeCard(r, true)));
+    }
+
+    const others = sorted.filter(r => !r._rel || r._rel.score < 60);
+    if (others.length > 0) {
+      addGroupHeader(grid, 'Autres résultats', others.length);
+      others.forEach(r => grid.appendChild(makeCard(r, false)));
+    }
+  } else {
+    // Group by source
+    Object.entries(bySource).forEach(([sourceName, items]) => {
+      addGroupHeader(grid, sourceName, items.length);
+      items.forEach(r => grid.appendChild(makeCard(r, false)));
+    });
+  }
+}
+
+function addGroupHeader(grid, title, count) {
+  const h = document.createElement('div');
+  h.className = 'group-header';
+  h.innerHTML = `<div class="group-title">${title}</div><div class="group-line"></div><div class="group-count">${count}</div>`;
+  grid.appendChild(h);
+}
+
+function makeCard(result, highlighted) {
+  const card = document.createElement('div');
+  card.className = 'result-card' + (highlighted ? ' highlighted' : '');
+
+  const score = result._rel?.score;
+  const scoreColor = score >= 80 ? '#00e676' : score >= 60 ? '#4a9eff' : '#ff9800';
+
+  card.innerHTML = `
+    <div class="card-top">
+      <div class="card-source">${result.sourceName}</div>
+      <div class="card-title">${escHtml(result.title)}</div>
+      ${score != null ? `
+        <div class="card-score" style="color:${scoreColor}">
+          <div class="score-bar"><div class="score-fill" style="width:${score}%;background:${scoreColor}"></div></div>
+          ${score}%
+        </div>
+      ` : ''}
+    </div>
+    ${result.desc ? `<div class="card-desc">${escHtml(result.desc)}</div>` : ''}
+    ${result._rel?.reason ? `<div class="card-ai-reason">🤖 ${escHtml(result._rel.reason)}</div>` : ''}
+    ${result._rel?.highlights?.length ? `
+      <div class="card-highlights">
+        ${result._rel.highlights.map(h => `<span class="highlight-tag">${escHtml(h)}</span>`).join('')}
+      </div>
+    ` : ''}
+    <div class="card-footer">
+      <span class="card-date">${result.date ? '📅 ' + result.date : ''}</span>
+      <a class="card-link" href="#">Ouvrir →</a>
+    </div>
+  `;
+
+  card.querySelector('.card-link')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (result.url) window.api.openUrl(result.url);
+  });
+  card.addEventListener('click', () => { if (result.url) window.api.openUrl(result.url); });
+
+  return card;
+}
+
+function escHtml(str) {
+  return (str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ─── Modal ────────────────────────────────────────────────────────────────────
+document.getElementById('modal-cancel').addEventListener('click', () => {
+  document.getElementById('modal-overlay').classList.remove('show');
+  aiEnabled = false;
+  document.getElementById('ai-toggle-el').classList.remove('on');
+  document.getElementById('search-btn').click();
+});
+document.getElementById('modal-config').addEventListener('click', () => {
+  document.getElementById('modal-overlay').classList.remove('show');
+  document.getElementById('api-key').focus();
+});
+
+// ─── Start ───────────────────────────────────────────────────────────────────
+init();
+</script>
+</body>
+</html>
