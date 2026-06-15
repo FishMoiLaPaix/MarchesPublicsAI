@@ -52,11 +52,40 @@ foreach ($f in $files) {
 
 # -- 3. Installer les dependances --
 Set-Location $AppDir
+$env:NPM_CONFIG_LOGLEVEL = "error"
 
-if (-not (Test-Path "$AppDir\node_modules\electron")) {
+# Verifier si Electron est installe ET fonctionnel
+function Test-ElectronOk {
+    $idx = "$AppDir\node_modules\electron\index.js"
+    if (-not (Test-Path $idx)) { return $false }
+    # Verifier que le path.txt existe (binaire telecharge)
+    $pathTxt = "$AppDir\node_modules\electron\path.txt"
+    if (-not (Test-Path $pathTxt)) { return $false }
+    $exeName = Get-Content $pathTxt -ErrorAction SilentlyContinue
+    $exePath = "$AppDir\node_modules\electron\dist\$exeName"
+    return (Test-Path $exePath)
+}
+
+if (-not (Test-ElectronOk)) {
     Write-Host "  Installation des dependances (premiere fois ~2 min)..." -ForegroundColor Cyan
-    $env:NPM_CONFIG_LOGLEVEL = "error"
+
+    # Nettoyer un electron corrompu si present
+    $electronDir = "$AppDir\node_modules\electron"
+    if (Test-Path $electronDir) {
+        Write-Host "  Nettoyage Electron corrompu..." -ForegroundColor Yellow
+        Remove-Item $electronDir -Recurse -Force
+    }
+
     cmd /c "npm install --save-dev electron --loglevel=error 2>nul"
+
+    # Verifier que ca a marche
+    if (-not (Test-ElectronOk)) {
+        Write-Host "  ERREUR: Electron n'a pas pu etre installe." -ForegroundColor Red
+        Write-Host "  Verifiez votre connexion internet et relancez." -ForegroundColor Red
+        Read-Host "  Appuyez sur Entree pour fermer"
+        exit 1
+    }
+
     cmd /c "npm install axios cheerio --loglevel=error 2>nul"
     Write-Host "  OK Dependances installees" -ForegroundColor Green
 } else {
