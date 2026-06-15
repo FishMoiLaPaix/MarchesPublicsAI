@@ -64,10 +64,11 @@ if (-not (Test-Path "$AppDir\node_modules\electron")) {
 }
 
 # -- 4. Creer le raccourci Bureau --
-$DesktopShortcut = "$env:USERPROFILE\Desktop\MarchesPublics AI.lnk"
+$WShell = New-Object -ComObject WScript.Shell
+$Desktop = $WShell.SpecialFolders("Desktop")
+$DesktopShortcut = "$Desktop\MarchesPublics AI.lnk"
 if (-not (Test-Path $DesktopShortcut)) {
-    $WS = New-Object -ComObject WScript.Shell
-    $SC = $WS.CreateShortcut($DesktopShortcut)
+    $SC = $WShell.CreateShortcut($DesktopShortcut)
     $SC.TargetPath = "powershell.exe"
     $SC.Arguments = "-WindowStyle Hidden -ExecutionPolicy Bypass -File `"$AppDir\launch.ps1`""
     $SC.WorkingDirectory = $AppDir
