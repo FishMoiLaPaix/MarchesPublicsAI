@@ -28,6 +28,46 @@
     --radius-sm: 6px;
   }
 
+  :root.light {
+    --bg: #f0f4f8;
+    --bg2: #e8edf5;
+    --bg3: #dde4ef;
+    --surface: #ffffff;
+    --surface2: #eef2f8;
+    --border: #c8d4e8;
+    --border2: #b0c0d8;
+    --blue: #1a6fd4;
+    --blue2: #1558b0;
+    --blue-glow: rgba(26,111,212,0.12);
+    --green: #1b8a4a;
+    --green2: #d4edda;
+    --orange: #d97706;
+    --red: #dc2626;
+    --text: #1a2540;
+    --text2: #3d5070;
+    --text3: #7a90b0;
+  }
+
+  *, *::before, *::after {
+    transition: background-color 0.2s, border-color 0.2s, color 0.15s;
+  }
+
+  /* theme toggle button */
+  .theme-btn {
+    margin-left: auto;
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text2);
+    cursor: pointer;
+    padding: 4px 8px;
+    font-size: 15px;
+    line-height: 1;
+    -webkit-app-region: no-drag;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .theme-btn:hover { border-color: var(--blue); color: var(--blue); }
+
   * { box-sizing: border-box; margin: 0; padding: 0; }
   
   body {
@@ -581,6 +621,7 @@
     </svg>
     MarchésPublics AI
   </div>
+  <button class="theme-btn" id="theme-btn" title="Basculer sombre/clair">🌙</button>
 </div>
 
 <div class="app">
@@ -1089,6 +1130,28 @@ document.getElementById('modal-config').addEventListener('click', () => {
   document.getElementById('modal-overlay').classList.remove('show');
   document.getElementById('api-key').focus();
 });
+
+// ─── Theme ───────────────────────────────────────────────────────────────────
+(function() {
+  const saved = localStorage.getItem('theme');
+  const btn = document.getElementById('theme-btn');
+  function applyTheme(theme) {
+    if (theme === 'light') {
+      document.documentElement.classList.add('light');
+      btn.textContent = '☀️';
+    } else {
+      document.documentElement.classList.remove('light');
+      btn.textContent = '🌙';
+    }
+  }
+  applyTheme(saved || 'dark');
+  btn.addEventListener('click', () => {
+    const isLight = document.documentElement.classList.contains('light');
+    const next = isLight ? 'dark' : 'light';
+    localStorage.setItem('theme', next);
+    applyTheme(next);
+  });
+})();
 
 // ─── Start ───────────────────────────────────────────────────────────────────
 init();
