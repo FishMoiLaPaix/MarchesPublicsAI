@@ -5,5 +5,6 @@ contextBridge.exposeInMainWorld('api', {
   searchSource: (args) => ipcRenderer.invoke('search-source', args),
   analyzeWithAI: (args) => ipcRenderer.invoke('analyze-with-ai', args),
   openUrl: (url) => ipcRenderer.invoke('open-url', url),
-  testAI: (config) => ipcRenderer.invoke('test-ai', config)
+  testAI: (config) => ipcRenderer.invoke('test-ai', config),
+  setTheme: (theme) => ipcRenderer.send('set-theme', theme)
 });

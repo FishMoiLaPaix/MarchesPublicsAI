@@ -36,6 +36,15 @@ app.whenReady().then(createWindow);
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 
+ipcMain.on('set-theme', (event, theme) => {
+  if (!mainWindow) return;
+  if (theme === 'light') {
+    mainWindow.setTitleBarOverlay({ color: '#f3f3f3', symbolColor: '#1a1a1a', height: 38 });
+  } else {
+    mainWindow.setTitleBarOverlay({ color: '#0a0f1e', symbolColor: '#4a9eff', height: 38 });
+  }
+});
+
 // ─── Scraper: sources de marchés publics ────────────────────────────────────
 const SOURCES = [
   {

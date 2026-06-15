@@ -29,23 +29,24 @@
   }
 
   :root.light {
-    --bg: #f0f4f8;
-    --bg2: #e8edf5;
-    --bg3: #dde4ef;
+    --bg: #f3f3f3;
+    --bg2: #ebebeb;
+    --bg3: #e3e3e3;
     --surface: #ffffff;
-    --surface2: #eef2f8;
-    --border: #c8d4e8;
-    --border2: #b0c0d8;
-    --blue: #1a6fd4;
-    --blue2: #1558b0;
-    --blue-glow: rgba(26,111,212,0.12);
-    --green: #1b8a4a;
-    --green2: #d4edda;
-    --orange: #d97706;
-    --red: #dc2626;
-    --text: #1a2540;
-    --text2: #3d5070;
-    --text3: #7a90b0;
+    --surface2: #f9f9f9;
+    --border: #e0e0e0;
+    --border2: #d4d4d4;
+    --blue: #0078d4;
+    --blue2: #106ebe;
+    --blue-glow: rgba(0,120,212,0.12);
+    --cyan: #0099bc;
+    --green: #107c10;
+    --green2: #dff6dd;
+    --orange: #ca5010;
+    --red: #c42b1c;
+    --text: #1a1a1a;
+    --text2: #616161;
+    --text3: #8a8a8a;
   }
 
   *, *::before, *::after {
@@ -1169,6 +1170,7 @@ document.getElementById('modal-config').addEventListener('click', () => {
     } else {
       document.documentElement.classList.remove('light');
     }
+    if (window.api && window.api.setTheme) window.api.setTheme(theme);
   }
   applyTheme(saved || 'dark');
   btn.addEventListener('click', () => {
