@@ -117,6 +117,72 @@ const SOURCES = [
     }
   },
   {
+    id: 'demat-ampa',
+    name: 'Demat-AMPA',
+    country: '🇫🇷',
+    description: 'Plateforme dématérialisation Occitanie / Midi-Pyrénées',
+    url: 'https://www.demat-ampa.fr',
+    search: async (query) => {
+      const encoded = encodeURIComponent(query);
+      const url = `https://www.demat-ampa.fr/index.php?page=entreprise.EntrepriseAdvancedSearch&AllCons&texte=${encoded}`;
+      const html = await fetchHtml(url);
+      const cheerio = require('cheerio');
+      const $ = cheerio.load(html);
+      const results = [];
+      $('.item_consultation').each((i, el) => {
+        if (i >= 10) return false;
+        const titleEl = $(el).find('[id*="panelBlocObjet"] .truncate-700');
+        const title = titleEl.attr('title') || titleEl.find('span').not('.h5, strong').last().text().trim();
+        const descEl = $(el).find('[id*="panelBlocDenomination"] .truncate-700');
+        const desc = descEl.attr('title') || descEl.find('.small').text().trim();
+        const day   = $(el).find('.date-min .day span').text().trim();
+        const month = $(el).find('.date-min .month span').text().trim();
+        const year  = $(el).find('.date-min .year span').text().trim();
+        const date  = day && year ? `${day} ${month} ${year}` : '';
+        const refCons = $(el).find('input[name*="refCons"]').val();
+        const orgCons = $(el).find('input[name*="orgCons"]').val();
+        const link = refCons && orgCons
+          ? `https://www.demat-ampa.fr/?page=Entreprise.EntrepriseConsultation&refConsultation=${refCons}&orgAcronyme=${orgCons}`
+          : 'https://www.demat-ampa.fr';
+        if (title && title.length > 5) results.push({ title, desc, date, url: link });
+      });
+      return results;
+    }
+  },
+  {
+    id: 'marches-securises',
+    name: 'Marchés Sécurisés',
+    country: '🇫🇷',
+    description: 'Plateforme nationale de dématérialisation',
+    url: 'https://www.marches-securises.fr',
+    search: async (query) => {
+      const encoded = encodeURIComponent(query);
+      const url = `https://www.marches-securises.fr/index.php?page=entreprise.EntrepriseAdvancedSearch&AllCons&texte=${encoded}`;
+      const html = await fetchHtml(url);
+      const cheerio = require('cheerio');
+      const $ = cheerio.load(html);
+      const results = [];
+      $('.item_consultation').each((i, el) => {
+        if (i >= 10) return false;
+        const titleEl = $(el).find('[id*="panelBlocObjet"] .truncate-700');
+        const title = titleEl.attr('title') || titleEl.find('span').not('.h5, strong').last().text().trim();
+        const descEl = $(el).find('[id*="panelBlocDenomination"] .truncate-700');
+        const desc = descEl.attr('title') || descEl.find('.small').text().trim();
+        const day   = $(el).find('.date-min .day span').text().trim();
+        const month = $(el).find('.date-min .month span').text().trim();
+        const year  = $(el).find('.date-min .year span').text().trim();
+        const date  = day && year ? `${day} ${month} ${year}` : '';
+        const refCons = $(el).find('input[name*="refCons"]').val();
+        const orgCons = $(el).find('input[name*="orgCons"]').val();
+        const link = refCons && orgCons
+          ? `https://www.marches-securises.fr/?page=Entreprise.EntrepriseConsultation&refConsultation=${refCons}&orgAcronyme=${orgCons}`
+          : 'https://www.marches-securises.fr';
+        if (title && title.length > 5) results.push({ title, desc, date, url: link });
+      });
+      return results;
+    }
+  },
+  {
     id: 'boamp2',
     name: 'BOAMP Attributions',
     country: '🇫🇷',

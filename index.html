@@ -617,6 +617,51 @@
   }
   .spinner.show { display: block; }
   @keyframes rotate { to { transform: rotate(360deg); } }
+
+  /* ─── Recent searches ─────────────────────────────────────── */
+  .recent-wrap {
+    display: flex; align-items: flex-start; gap: 6px; flex-wrap: wrap;
+    padding: 7px 20px 9px; border-bottom: 1px solid var(--border);
+    background: var(--bg);
+  }
+  .recent-label {
+    font-size: 11px; color: var(--text3); white-space: nowrap; padding-top: 4px; flex-shrink: 0;
+  }
+  .recent-chips-row { display: flex; flex-wrap: wrap; gap: 5px; flex: 1; }
+  .recent-chip {
+    display: inline-flex; align-items: center; gap: 0;
+    padding: 2px 2px 2px 8px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; font-size: 11px; color: var(--text2);
+    cursor: pointer; transition: border-color .15s, color .15s; max-width: 200px;
+  }
+  .recent-chip:hover { border-color: var(--blue); color: var(--blue); }
+  .recent-chip-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .recent-chip-del {
+    background: none; border: none; color: var(--text3); font-size: 15px;
+    line-height: 1; padding: 0 5px; cursor: pointer; flex-shrink: 0;
+  }
+  .recent-chip-del:hover { color: var(--red); }
+
+  /* ─── Recent AI configs ───────────────────────────────────── */
+  .recent-cfg-section {
+    margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border);
+  }
+  .recent-cfg-label { font-size: 11px; color: var(--text3); margin-bottom: 5px; }
+  .recent-cfg-item {
+    display: flex; align-items: center; gap: 6px;
+    padding: 5px 8px; border: 1px solid var(--border);
+    border-radius: var(--radius-sm); cursor: pointer;
+    font-size: 11px; color: var(--text2); margin-bottom: 4px;
+    transition: border-color .15s;
+  }
+  .recent-cfg-item:hover { border-color: var(--blue); color: var(--text); }
+  .recent-cfg-provider {
+    font-weight: 700; font-size: 10px; color: var(--blue);
+    text-transform: uppercase; flex-shrink: 0;
+  }
+  .recent-cfg-model { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .recent-cfg-hint { font-size: 10px; color: var(--text3); flex-shrink: 0; }
 </style>
 </head>
 <body>
@@ -689,6 +734,12 @@
         <span>Tester la connexion</span>
       </button>
       <div class="test-status" id="test-status"></div>
+
+      <!-- Configs IA récentes -->
+      <div class="recent-cfg-section" id="recent-cfg-section" style="display:none">
+        <div class="recent-cfg-label">Configs récentes</div>
+        <div id="recent-cfg-list"></div>
+      </div>
     </div>
 
     <!-- Sources -->
@@ -724,6 +775,12 @@
         </label>
         <span class="result-count" id="result-count"></span>
       </div>
+    </div>
+
+    <!-- Recherches récentes -->
+    <div class="recent-wrap" id="recent-wrap" style="display:none">
+      <span class="recent-label">Récent :</span>
+      <div class="recent-chips-row" id="recent-chips"></div>
     </div>
 
     <!-- Results -->
@@ -791,6 +848,9 @@ async function init() {
     document.getElementById('api-model').value = saved.model || '';
     updateProviderUI();
   }
+
+  renderRecentSearches();
+  renderRecentConfigs();
 }
 
 // ─── Config persist ───────────────────────────────────────────────────────────
@@ -806,6 +866,91 @@ function saveConfig() {
 
 function loadConfig() {
   try { return JSON.parse(localStorage.getItem('ai-config')); } catch { return null; }
+}
+
+// ─── Recent searches ──────────────────────────────────────────────────────────
+function saveRecentSearch(query) {
+  if (!query || query.length < 2) return;
+  let list = [];
+  try { list = JSON.parse(localStorage.getItem('recent-searches') || '[]'); } catch {}
+  list = list.filter(q => q !== query);
+  list.unshift(query);
+  if (list.length > 8) list = list.slice(0, 8);
+  localStorage.setItem('recent-searches', JSON.stringify(list));
+  renderRecentSearches();
+}
+
+function renderRecentSearches() {
+  let list = [];
+  try { list = JSON.parse(localStorage.getItem('recent-searches') || '[]'); } catch {}
+  const wrap = document.getElementById('recent-wrap');
+  const chips = document.getElementById('recent-chips');
+  if (!list.length) { wrap.style.display = 'none'; return; }
+  wrap.style.display = 'flex';
+  chips.innerHTML = '';
+  list.forEach((q, i) => {
+    const chip = document.createElement('span');
+    chip.className = 'recent-chip';
+    chip.innerHTML = `<span class="recent-chip-text">${escHtml(q)}</span><button class="recent-chip-del" title="Supprimer">×</button>`;
+    chip.querySelector('.recent-chip-text').addEventListener('click', () => {
+      document.getElementById('search-input').value = q;
+      document.getElementById('search-btn').click();
+    });
+    chip.querySelector('.recent-chip-del').addEventListener('click', (e) => {
+      e.stopPropagation();
+      let cur = [];
+      try { cur = JSON.parse(localStorage.getItem('recent-searches') || '[]'); } catch {}
+      cur.splice(cur.indexOf(q), 1);
+      localStorage.setItem('recent-searches', JSON.stringify(cur));
+      renderRecentSearches();
+    });
+    chips.appendChild(chip);
+  });
+}
+
+// ─── Recent AI configs ────────────────────────────────────────────────────────
+function saveRecentConfig(cfg) {
+  if (!cfg || (!cfg.apiKey && !cfg.endpoint)) return;
+  let list = [];
+  try { list = JSON.parse(localStorage.getItem('recent-configs') || '[]'); } catch {}
+  const key = cfg.provider + '|' + cfg.model + '|' + (cfg.endpoint || '');
+  list = list.filter(c => (c.provider + '|' + c.model + '|' + (c.endpoint || '')) !== key);
+  const entry = { provider: cfg.provider, apiKey: cfg.apiKey, endpoint: cfg.endpoint || '', model: cfg.model || '' };
+  list.unshift(entry);
+  if (list.length > 4) list = list.slice(0, 4);
+  localStorage.setItem('recent-configs', JSON.stringify(list));
+  renderRecentConfigs();
+}
+
+function renderRecentConfigs() {
+  let list = [];
+  try { list = JSON.parse(localStorage.getItem('recent-configs') || '[]'); } catch {}
+  const section = document.getElementById('recent-cfg-section');
+  const listEl = document.getElementById('recent-cfg-list');
+  if (!list.length) { section.style.display = 'none'; return; }
+  section.style.display = 'block';
+  listEl.innerHTML = '';
+  list.forEach((cfg, i) => {
+    const item = document.createElement('div');
+    item.className = 'recent-cfg-item';
+    const modelLabel = cfg.model || (cfg.endpoint ? cfg.endpoint.replace(/^https?:\/\//, '').slice(0, 20) : '—');
+    const keyHint = cfg.apiKey ? cfg.apiKey.slice(0, 6) + '…' : '';
+    item.innerHTML = `
+      <span class="recent-cfg-provider">${escHtml(cfg.provider)}</span>
+      <span class="recent-cfg-model">${escHtml(modelLabel)}</span>
+      ${keyHint ? `<span class="recent-cfg-hint">${escHtml(keyHint)}</span>` : ''}
+    `;
+    item.title = `Restaurer : ${cfg.provider} / ${cfg.model || 'par défaut'}`;
+    item.addEventListener('click', () => {
+      currentProvider = cfg.provider;
+      document.getElementById('api-key').value = cfg.apiKey || '';
+      document.getElementById('api-endpoint').value = cfg.endpoint || '';
+      document.getElementById('api-model').value = cfg.model || '';
+      updateProviderUI();
+      saveConfig();
+    });
+    listEl.appendChild(item);
+  });
 }
 
 // ─── Provider UI ─────────────────────────────────────────────────────────────
@@ -958,6 +1103,9 @@ document.getElementById('search-btn').addEventListener('click', async () => {
 });
 
 async function runSearch(query, selected, aiConfig) {
+  saveRecentSearch(query);
+  if (aiConfig.apiKey || aiConfig.endpoint) saveRecentConfig(aiConfig);
+
   // UI
   document.getElementById('welcome-state').style.display = 'none';
   document.getElementById('ai-panel').classList.remove('visible');
