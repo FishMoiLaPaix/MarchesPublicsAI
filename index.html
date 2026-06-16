@@ -657,8 +657,9 @@
   }
   .recent-cfg-item:hover { border-color: var(--blue); color: var(--text); }
   .recent-cfg-provider {
-    font-weight: 700; font-size: 10px; color: var(--blue);
-    text-transform: uppercase; flex-shrink: 0;
+    font-weight: 600; font-size: 10px; color: var(--text3);
+    border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px;
+    flex-shrink: 0;
   }
   .recent-cfg-model { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .recent-cfg-hint { font-size: 10px; color: var(--text3); flex-shrink: 0; }
@@ -835,7 +836,7 @@
 
       <!-- Configs IA récentes -->
       <div class="recent-cfg-section" id="recent-cfg-section" style="display:none">
-        <div class="recent-cfg-label">Configs récentes</div>
+        <div class="recent-cfg-label">Configs enregistrées</div>
         <div id="recent-cfg-list"></div>
       </div>
     </div>
@@ -974,6 +975,8 @@ async function init() {
   sources.forEach(s => selectedSources.add(s.id));
   updateSelectAll();
 
+  loadGeoReference(); // charge le référentiel géo officiel (en cache après 1er lancement)
+
   // Load saved config
   const saved = loadConfig();
   if (saved) {
@@ -1053,7 +1056,7 @@ function renderRecentSearches(list) {
 }
 
 // ─── Recent AI configs ────────────────────────────────────────────────────────
-const PROVIDER_LABELS = { anthropic: 'Claude', openai: 'OpenAI', mistral: 'Mistral', ollama: 'Ollama', custom: 'Endpoint' };
+const PROVIDER_LABELS = { anthropic: 'Claude', openai: 'OpenAI', mistral: 'Mistral', ollama: 'Ollama', custom: 'Custom' };
 
 async function saveRecentConfig(cfg, name) {
   if (!cfg || (!cfg.apiKey && !cfg.endpoint)) return;
@@ -1482,87 +1485,59 @@ function norm(s) {
   return (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 }
 
-// ─── Référentiel géographique ───────────────────────────────────────────────────
-// Toute zone (département, ville, code postal, n° de dept) est canonicalisée vers
-// un CODE département. Ainsi "Gironde", "Bordeaux", "33000", "33" → tous = "33".
-const DEPT_NAMES = {
-  'ain':'01','aisne':'02','allier':'03','alpes-de-haute-provence':'04','hautes-alpes':'05',
-  'alpes-maritimes':'06','ardeche':'07','ardennes':'08','ariege':'09','aube':'10','aude':'11',
-  'aveyron':'12','bouches-du-rhone':'13','calvados':'14','cantal':'15','charente':'16',
-  'charente-maritime':'17','cher':'18','correze':'19','corse-du-sud':'2a','haute-corse':'2b',
-  "cote-d'or":'21',"cotes-d'armor":'22','creuse':'23','dordogne':'24','doubs':'25','drome':'26',
-  'eure':'27','eure-et-loir':'28','finistere':'29','gard':'30','haute-garonne':'31','gers':'32',
-  'gironde':'33','herault':'34','ille-et-vilaine':'35','indre':'36','indre-et-loire':'37',
-  'isere':'38','jura':'39','landes':'40','loir-et-cher':'41','loire':'42','haute-loire':'43',
-  'loire-atlantique':'44','loiret':'45','lot':'46','lot-et-garonne':'47','lozere':'48',
-  'maine-et-loire':'49','manche':'50','marne':'51','haute-marne':'52','mayenne':'53',
-  'meurthe-et-moselle':'54','meuse':'55','morbihan':'56','moselle':'57','nievre':'58','nord':'59',
-  'oise':'60','orne':'61','pas-de-calais':'62','puy-de-dome':'63','pyrenees-atlantiques':'64',
-  'hautes-pyrenees':'65','pyrenees-orientales':'66','bas-rhin':'67','haut-rhin':'68','rhone':'69',
-  'haute-saone':'70','saone-et-loire':'71','sarthe':'72','savoie':'73','haute-savoie':'74',
-  'paris':'75','seine-maritime':'76','seine-et-marne':'77','yvelines':'78','deux-sevres':'79',
-  'somme':'80','tarn':'81','tarn-et-garonne':'82','var':'83','vaucluse':'84','vendee':'85',
-  'vienne':'86','haute-vienne':'87','vosges':'88','yonne':'89','territoire de belfort':'90',
-  'essonne':'91','hauts-de-seine':'92','seine-saint-denis':'93','val-de-marne':'94',"val-d'oise":'95',
-  'guadeloupe':'971','martinique':'972','guyane':'973','la reunion':'974','reunion':'974','mayotte':'976'
-};
-const CITY_NAMES = {
-  'marseille':'13','lyon':'69','toulouse':'31','nice':'06','nantes':'44','montpellier':'34',
-  'strasbourg':'67','bordeaux':'33','lille':'59','rennes':'35','reims':'51','saint-etienne':'42',
-  'toulon':'83','grenoble':'38','dijon':'21','angers':'49','nimes':'30','villeurbanne':'69',
-  'clermont-ferrand':'63','le havre':'76','aix-en-provence':'13','brest':'29','limoges':'87',
-  'tours':'37','amiens':'80','perpignan':'66','metz':'57','besancon':'25','orleans':'45',
-  'rouen':'76','mulhouse':'68','caen':'14','nancy':'54','pessac':'33','merignac':'33',
-  'versailles':'78','pau':'64','bayonne':'64','cannes':'06','antibes':'06'
-};
-const REGION_DEPTS = {
-  'ile-de-france':['75','77','78','91','92','93','94','95'],
-  'auvergne-rhone-alpes':['01','03','07','15','26','38','42','43','63','69','73','74'],
-  'bretagne':['22','29','35','56'],
-  'normandie':['14','27','50','61','76'],
-  'occitanie':['09','11','12','30','31','32','34','46','48','65','66','81','82'],
-  'nouvelle-aquitaine':['16','17','19','23','24','33','40','47','64','79','86','87'],
-  'grand est':['08','10','51','52','54','55','57','67','68','88'],
-  'hauts-de-france':['02','59','60','62','80'],
-  'pays de la loire':['44','49','53','72','85'],
-  'bourgogne-franche-comte':['21','25','39','58','70','71','89','90'],
-  'centre-val de loire':['18','28','36','37','41','45'],
-  "provence-alpes-cote d'azur":['04','05','06','13','83','84'],
-  'paca':['04','05','06','13','83','84'],
-  'corse':['2a','2b']
-};
-const DEPT_CODES = new Set(Object.values(DEPT_NAMES));
+// ─── Référentiel géographique (chargé depuis l'API officielle geo.api.gouv.fr) ──
+// Aucune zone n'est définie à la main : départements, régions et communes
+// (≥ 2000 hab.) viennent du registre national, via le process principal (cache).
+let GEO_NAMES = new Map();   // nom normalisé → [codes département]
+let DEPT_CODE_SET = new Set();
 
-// Tous les mots géographiques (pour ne PAS les compter comme mots-clés de domaine).
-const GEO_WORDS = new Set();
-[...Object.keys(DEPT_NAMES), ...Object.keys(CITY_NAMES), ...Object.keys(REGION_DEPTS)].forEach(name => {
-  name.split(/[^a-z0-9]+/).forEach(w => { if (w.length >= 3) GEO_WORDS.add(w); });
-});
-
-// Matche un nom comme MOT ENTIER (évite "var"⊂"variante", "gard"⊂"regarder").
-function nameInText(nt, name) {
-  return new RegExp('(^|[^a-z])' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '([^a-z]|$)').test(nt);
+async function loadGeoReference() {
+  try {
+    const ref = await window.api.getGeoReference();
+    if (ref && ref.names) {
+      GEO_NAMES = new Map(Object.entries(ref.names));
+      DEPT_CODE_SET = new Set(ref.deptCodes || []);
+    }
+  } catch {}
 }
 
-// Renvoie l'ensemble des CODES département évoqués par un texte.
+function normWords(text) {
+  return norm(text).replace(/[^a-z0-9]+/g, ' ').trim().split(' ').filter(Boolean);
+}
+
+// Détecte automatiquement les zones (codes département) citées dans un texte.
+// Renvoie aussi les mots consommés par un nom de lieu (pour les exclure des mots-clés).
 // includeBareCode : n'accepter les n° à 2 chiffres seuls (ex: "33") que pour la requête.
-function extractGeoZones(text, includeBareCode) {
-  const nt = norm(text);
-  const zones = new Set();
-  (nt.match(/\b\d{5}\b/g) || []).forEach(cp => zones.add(cp.startsWith('97') ? cp.slice(0, 3) : cp.slice(0, 2)));
-  for (const [name, code] of Object.entries(DEPT_NAMES)) if (nameInText(nt, name)) zones.add(code);
-  for (const [city, code] of Object.entries(CITY_NAMES)) if (nameInText(nt, city)) zones.add(code);
-  for (const [region, codes] of Object.entries(REGION_DEPTS)) if (nameInText(nt, region)) codes.forEach(c => zones.add(c));
-  if (includeBareCode) nt.split(/[^0-9]+/).forEach(tok => { if (tok.length === 2 && DEPT_CODES.has(tok)) zones.add(tok); });
-  return zones;
+function geoScan(text, includeBareCode) {
+  const toks = normWords(text);
+  const zones = new Set(), words = new Set();
+  toks.forEach(t => {
+    if (/^\d{5}$/.test(t)) { zones.add(t.startsWith('97') ? t.slice(0, 3) : t.slice(0, 2)); words.add(t); }
+  });
+  if (includeBareCode) toks.forEach(t => { if (/^\d{2}$/.test(t) && DEPT_CODE_SET.has(t)) { zones.add(t); words.add(t); } });
+  // n-grammes (3 → 1 mots) confrontés à la table officielle des noms de lieux
+  for (let i = 0; i < toks.length; i++) {
+    for (let n = Math.min(3, toks.length - i); n >= 1; n--) {
+      const gram = toks.slice(i, i + n).join(' ');
+      if (gram.length < 3) continue;
+      const codes = GEO_NAMES.get(gram);
+      if (codes) {
+        codes.forEach(c => zones.add(c));
+        for (let k = i; k < i + n; k++) words.add(toks[k]);
+        i += n - 1;
+        break;
+      }
+    }
+  }
+  return { zones, words };
 }
 
 // ─── Mots-clés de domaine (hors géographie) ────────────────────────────────────
 const STOPWORDS = new Set(['de','du','des','la','le','les','un','une','et','ou','en','pour',
   'dans','sur','au','aux','avec','sans','sous','par','the','of','and','marche','marches','public','publics']);
-function queryKeywords(query) {
-  return [...new Set(norm(query).split(/[^a-z0-9]+/)
-    .filter(w => w.length >= 3 && !STOPWORDS.has(w) && !GEO_WORDS.has(w)))];
+function queryKeywords(query, geoWords) {
+  return [...new Set(normWords(query).filter(w =>
+    w.length >= 3 && !STOPWORDS.has(w) && !/^\d+$/.test(w) && !(geoWords && geoWords.has(w))))];
 }
 
 // Racinisation légère FR : "sportif/sportive/sports" → "sport", "équipements" → "equip".
@@ -1573,25 +1548,43 @@ function stemWord(w) {
 
 // ─── Score de correspondance mots-clés + géo (calcul local, sans IA) ───────────
 function computeClientScore(result, keywords, queryZones) {
-  const raw = (result.title || '') + ' ' + (result.desc || '');
-  const text = norm(raw);
+  const titleN = norm(result.title);
+  const text = titleN + ' ' + norm(result.desc);
   const textStems = new Set(text.split(/[^a-z0-9]+/).filter(Boolean).map(stemWord));
-  const matched = keywords.filter(k => {
+  const titleStems = new Set(titleN.split(/[^a-z0-9]+/).filter(Boolean).map(stemWord));
+
+  let matchedCount = 0, titleMatches = 0;
+  keywords.forEach(k => {
     const ks = stemWord(k);
-    return text.includes(k) || textStems.has(k) || textStems.has(ks);
+    if (text.includes(k) || textStems.has(k) || textStems.has(ks)) {
+      matchedCount++;
+      if (titleN.includes(k) || titleStems.has(ks)) titleMatches++;
+    }
   });
-  let score = keywords.length ? Math.round((matched.length / keywords.length) * 100) : 60;
+
+  // Score non linéaire : on récompense la couverture COMPLÈTE des mots-clés et on
+  // pénalise les correspondances partielles (1 mot sur 2 → ~38 %, pas 50 %).
+  let score;
+  if (!keywords.length) {
+    score = 60;
+  } else {
+    const cov = matchedCount / keywords.length;
+    score = Math.round(Math.pow(cov, 1.4) * 100);
+    if (text.includes(keywords.join(' '))) score = 100;          // phrase exacte présente
+    if (titleMatches > 0 && score < 100) score = Math.min(100, score + 8); // bonus si dans le titre
+  }
 
   // Pénalité géographique : la requête cible une zone, l'annonce en cite une AUTRE.
   let geoMismatch = false;
   if (queryZones.size) {
-    const resultZones = extractGeoZones(raw, false);
+    const resultZones = geoScan((result.title || '') + ' ' + (result.desc || ''), false).zones;
+    (result.depts || []).forEach(c => resultZones.add(c)); // dept officiel fourni par la source (BOAMP)
     if (resultZones.size && ![...resultZones].some(z => queryZones.has(z))) {
       geoMismatch = true;
       score = Math.min(score, 8);
     }
   }
-  return { score, matchedCount: matched.length, geoMismatch };
+  return { score, matchedCount, geoMismatch };
 }
 
 // ─── Parsing de dates (formats hétérogènes selon les sources) ──────────────────
@@ -1619,8 +1612,9 @@ function inDateRange(result) {
 
 // ─── Pipeline : filtrage (mots-clés + dates) puis tri par pertinence ───────────
 function getProcessedResults() {
-  const keywords = queryKeywords(lastQuery);
-  const queryZones = extractGeoZones(lastQuery, true);
+  const qScan = geoScan(lastQuery, true);
+  const queryZones = qScan.zones;
+  const keywords = queryKeywords(lastQuery, qScan.words);
 
   const relMap = {};
   if (aiAnalysis?.relevant) aiAnalysis.relevant.forEach(r => { relMap[r.index] = r; });

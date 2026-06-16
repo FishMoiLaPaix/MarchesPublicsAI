@@ -43,7 +43,10 @@ if (!gotTheLock) {
   app.on('second-instance', () => {
     if (mainWindow) { if (mainWindow.isMinimized()) mainWindow.restore(); mainWindow.focus(); }
   });
-  app.whenReady().then(createWindow);
+  app.whenReady().then(() => {
+    createWindow();
+    getGeoReference().catch(() => {}); // précharge le référentiel géo en tâche de fond
+  });
   app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 }
@@ -88,6 +91,7 @@ const SOURCES = [
           title: r.objet || 'Avis BOAMP',
           desc: r.nomacheteur ? `${r.nomacheteur}${r.famille_libelle ? ' — ' + r.famille_libelle : ''}` : (r.famille_libelle || ''),
           date: (r.dateparution || '').slice(0, 10),
+          depts: Array.isArray(r.code_departement) ? r.code_departement : (r.code_departement_prestation ? [r.code_departement_prestation] : []),
           url: r.idweb ? `https://www.boamp.fr/avis/detail/${r.idweb}` : 'https://www.boamp.fr'
         }))
         .filter(r => r.title);
@@ -354,6 +358,7 @@ const SOURCES = [
           title: r.objet || 'Attribution BOAMP',
           desc: r.titulaire ? `Titulaire : ${r.titulaire}${r.nomacheteur ? ' — ' + r.nomacheteur : ''}` : (r.nomacheteur || ''),
           date: (r.dateparution || '').slice(0, 10),
+          depts: Array.isArray(r.code_departement) ? r.code_departement : (r.code_departement_prestation ? [r.code_departement_prestation] : []),
           url: r.idweb ? `https://www.boamp.fr/avis/detail/${r.idweb}` : 'https://www.boamp.fr'
         }))
         .filter(r => r.title);
@@ -361,6 +366,54 @@ const SOURCES = [
     }
   }
 ];
+
+// ─── Référentiel géographique (officiel, geo.api.gouv.fr) ────────────────────
+// Construit automatiquement une table { nom normalisé → [codes département] } à
+// partir des données officielles (départements, régions, communes ≥ 2000 hab).
+// Aucune zone n'est définie à la main : tout vient du registre national.
+let _geoRefPromise = null;
+function geoNorm(s) {
+  return (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ').trim();
+}
+async function buildGeoReference() {
+  const cached = loadStore()['geo-ref-v1'];
+  if (cached && cached.names) return cached;
+
+  const ref = { names: {}, deptCodes: [] };
+  const add = (name, codes) => {
+    const k = geoNorm(name);
+    if (!k || k.length < 3) return;
+    ref.names[k] = [...new Set([...(ref.names[k] || []), ...codes])];
+  };
+
+  const [deps, regs, communes] = await Promise.all([
+    fetchJson('https://geo.api.gouv.fr/departements?fields=nom,code,codeRegion'),
+    fetchJson('https://geo.api.gouv.fr/regions?fields=nom,code'),
+    fetchJson('https://geo.api.gouv.fr/communes?fields=nom,codeDepartement,population&format=json')
+  ]);
+
+  deps.forEach(d => add(d.nom, [d.code]));
+  ref.deptCodes = deps.map(d => d.code);
+
+  const byRegion = {};
+  deps.forEach(d => { (byRegion[d.codeRegion] = byRegion[d.codeRegion] || []).push(d.code); });
+  regs.forEach(r => add(r.nom, byRegion[r.code] || []));
+
+  communes.filter(c => (c.population || 0) >= 2000)
+    .forEach(c => add(c.nom, [c.codeDepartement]));
+
+  loadStore()['geo-ref-v1'] = ref;
+  saveStore();
+  return ref;
+}
+function getGeoReference() {
+  if (!_geoRefPromise) _geoRefPromise = buildGeoReference().catch(e => { _geoRefPromise = null; throw e; });
+  return _geoRefPromise;
+}
+ipcMain.handle('get-geo-reference', async () => {
+  try { return await getGeoReference(); } catch { return null; }
+});
 
 // ─── HTTP helpers ────────────────────────────────────────────────────────────
 function fetchHtml(url, timeout = 15000) {

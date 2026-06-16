@@ -8,5 +8,6 @@ contextBridge.exposeInMainWorld('api', {
   testAI: (config) => ipcRenderer.invoke('test-ai', config),
   setTheme: (theme) => ipcRenderer.send('set-theme', theme),
   storeGet: (key) => ipcRenderer.invoke('store-get', key),
-  storeSet: (key, value) => ipcRenderer.invoke('store-set', key, value)
+  storeSet: (key, value) => ipcRenderer.invoke('store-set', key, value),
+  getGeoReference: () => ipcRenderer.invoke('get-geo-reference')
 });
