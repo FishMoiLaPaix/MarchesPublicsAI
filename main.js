@@ -76,20 +76,35 @@ ipcMain.on('set-theme', (event, theme) => {
 
 // ─── Scraper: sources de marchés publics ────────────────────────────────────
 
-// Construit une clause ODSQL "where" pour BOAMP : recherche les mots-clés DANS
-// l'objet du marché (et non un q= plein-texte inopérant) et filtre par
-// département officiel. Sépare ainsi le QUOI (mots-clés) du OÙ (zone).
-function boampWhere(query, opts = {}) {
+// Construit une clause ODSQL "where" pour BOAMP à partir des facettes de recherche :
+// mots-clés dans l'objet (objet like, pas le q= plein-texte inopérant), département
+// officiel, et critères structurés (domaine, type de marché, procédure, type d'avis,
+// état, dates de publication et de clôture). Sépare le QUOI du OÙ et du COMMENT.
+function boampToday() { return new Date().toISOString().slice(0, 10); }
+function boampWhere(opts = {}) {
   const esc = s => String(s).replace(/["\\]/g, ' ').trim();
-  const hasKw = Array.isArray(opts.keywords);
-  const kws = (hasKw ? opts.keywords : String(query).split(/\s+/)).map(esc).filter(w => w.length >= 3);
-  const depts = Array.isArray(opts.depts) ? opts.depts : [];
   const clauses = [];
+  const kws = (Array.isArray(opts.keywords) ? opts.keywords : []).map(esc).filter(w => w.length >= 3);
   kws.forEach(w => clauses.push(`objet like "${w}"`));
+
+  const depts = Array.isArray(opts.depts) ? opts.depts : [];
   if (depts.length) {
     const dq = depts.map(d => `code_departement="${esc(d)}" or code_departement_prestation="${esc(d)}"`).join(' or ');
     clauses.push(`(${dq})`);
   }
+
+  const f = opts.facets || {};
+  if (f.typeMarche) clauses.push(`type_marche="${esc(f.typeMarche)}"`);
+  if (f.famille)    clauses.push(`famille_libelle="${esc(f.famille)}"`);
+  if (f.procedure)  clauses.push(`procedure_libelle="${esc(f.procedure)}"`);
+  if (f.nature)     clauses.push(`nature_libelle="${esc(f.nature)}"`);
+  if (f.pubFrom)    clauses.push(`dateparution>=date'${esc(f.pubFrom)}'`);
+  if (f.pubTo)      clauses.push(`dateparution<=date'${esc(f.pubTo)}'`);
+  if (f.closeFrom)  clauses.push(`datelimitereponse>=date'${esc(f.closeFrom)}'`);
+  if (f.closeTo)    clauses.push(`datelimitereponse<=date'${esc(f.closeTo)}'`);
+  if (f.etat === 'en-cours') clauses.push(`datelimitereponse>=date'${boampToday()}'`);
+  if (f.etat === 'cloture')  clauses.push(`datelimitereponse<date'${boampToday()}'`);
+
   return clauses.join(' and ');
 }
 const BOAMP_RECORDS = 'https://boamp-datadila.opendatasoft.com/api/explore/v2.1/catalog/datasets/boamp/records';
@@ -102,15 +117,18 @@ const SOURCES = [
     description: 'Bulletin Officiel des Annonces de Marchés Publics',
     url: 'https://www.boamp.fr',
     search: async (query, offset = 0, opts = {}) => {
-      const where = boampWhere(query, opts);
+      const where = boampWhere(opts);
       let url = `${BOAMP_RECORDS}?limit=50&offset=${offset}&order_by=${encodeURIComponent('dateparution desc')}`;
-      url += where ? `&where=${encodeURIComponent(where)}` : `&q=${encodeURIComponent(query)}`;
+      if (where) url += `&where=${encodeURIComponent(where)}`;
+      else if (query) url += `&q=${encodeURIComponent(query)}`;
       const data = await fetchJson(url);
       const items = (data.results || [])
         .map(r => ({
           title: r.objet || 'Avis BOAMP',
           desc: r.nomacheteur ? `${r.nomacheteur}${r.famille_libelle ? ' — ' + r.famille_libelle : ''}` : (r.famille_libelle || ''),
           date: (r.dateparution || '').slice(0, 10),
+          datelimite: (r.datelimitereponse || '').slice(0, 10),
+          procedure: r.procedure_libelle || '',
           depts: Array.isArray(r.code_departement) ? r.code_departement : (r.code_departement_prestation ? [r.code_departement_prestation] : []),
           url: r.idweb ? `https://www.boamp.fr/avis/detail/${r.idweb}` : 'https://www.boamp.fr'
         }))
@@ -371,7 +389,7 @@ const SOURCES = [
     url: 'https://www.boamp.fr',
     search: async (query, offset = 0, opts = {}) => {
       const parts = ['nature="ATTRIBUTION"'];
-      const w = boampWhere(query, opts);
+      const w = boampWhere(opts);
       if (w) parts.push(w);
       const where = parts.join(' and ');
       const url = `${BOAMP_RECORDS}?where=${encodeURIComponent(where)}&limit=50&offset=${offset}&order_by=${encodeURIComponent('dateparution desc')}`;
@@ -381,6 +399,8 @@ const SOURCES = [
           title: r.objet || 'Attribution BOAMP',
           desc: r.titulaire ? `Titulaire : ${r.titulaire}${r.nomacheteur ? ' — ' + r.nomacheteur : ''}` : (r.nomacheteur || ''),
           date: (r.dateparution || '').slice(0, 10),
+          datelimite: (r.datelimitereponse || '').slice(0, 10),
+          procedure: r.procedure_libelle || '',
           depts: Array.isArray(r.code_departement) ? r.code_departement : (r.code_departement_prestation ? [r.code_departement_prestation] : []),
           url: r.idweb ? `https://www.boamp.fr/avis/detail/${r.idweb}` : 'https://www.boamp.fr'
         }))
@@ -562,11 +582,11 @@ async function callAI(config, systemPrompt, userPrompt) {
 // ─── IPC handlers ────────────────────────────────────────────────────────────
 ipcMain.handle('get-sources', () => SOURCES.map(s => ({ id: s.id, name: s.name, country: s.country, description: s.description, url: s.url })));
 
-ipcMain.handle('search-source', async (_, { sourceId, query, offset = 0, keywords, depts }) => {
+ipcMain.handle('search-source', async (_, { sourceId, query, offset = 0, keywords, depts, facets }) => {
   const source = SOURCES.find(s => s.id === sourceId);
   if (!source) return { sourceId, results: [], total: 0, error: 'Source inconnue' };
   try {
-    const raw = await source.search(query, offset, { keywords, depts });
+    const raw = await source.search(query, offset, { keywords, depts, facets });
     const results = Array.isArray(raw) ? raw : (raw.results || []);
     const total = Array.isArray(raw) ? raw.length : (raw.total || results.length);
     return { sourceId, results, total };

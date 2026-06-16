@@ -698,6 +698,37 @@
   .load-more-btn:disabled { opacity: .5; cursor: default; }
   .load-more-info { font-size: 12px; color: var(--text3); }
 
+  /* ─── Barre de critères (facettes) ────────────────────────── */
+  .fbar {
+    display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+    margin-top: 12px;
+  }
+  .f-text {
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); color: var(--text);
+    font-size: 12px; padding: 7px 11px; outline: none;
+    min-width: 210px; flex: 1 1 210px; max-width: 280px;
+    transition: border-color .15s;
+  }
+  .f-text:focus { border-color: var(--blue); }
+  .f-text::placeholder { color: var(--text3); }
+  .f-select {
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); color: var(--text2);
+    font-size: 12px; padding: 7px 9px; cursor: pointer; outline: none;
+    max-width: 200px; transition: border-color .15s, color .15s;
+  }
+  .f-select:hover { border-color: var(--blue); }
+  .f-select:focus { border-color: var(--blue); }
+  .f-select.active { border-color: var(--blue); color: var(--blue); }
+  .f-select option { background: var(--surface); color: var(--text); }
+  .f-reset {
+    background: transparent; border: 1px solid var(--border);
+    border-radius: var(--radius-sm); color: var(--text3);
+    font-size: 12px; padding: 7px 11px; cursor: pointer; transition: all .15s;
+  }
+  .f-reset:hover { border-color: var(--red); color: var(--red); }
+
   /* ─── Date filter dropdown ────────────────────────────────── */
   .date-filter { position: relative; }
   .date-filter-btn {
@@ -860,39 +891,91 @@
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
           </svg>
-          <input type="text" class="search-input" id="search-input" placeholder="Ex: développement logiciel, travaux de voirie, fournitures informatiques..." />
+          <input type="text" class="search-input" id="search-input" placeholder="Recherche précise : objet, référence ou mot exact d'un appel d'offres…" />
         </div>
         <button class="search-btn" id="search-btn">
           <div class="spinner" id="search-spinner"></div>
           <span id="search-btn-text">Rechercher</span>
         </button>
       </div>
+
+      <!-- Barre de critères (facettes) -->
+      <div class="fbar" id="fbar">
+        <input type="text" class="f-text" id="f-secteur" placeholder="🔎 Secteur d'activité (ex: équipement sportif)" />
+        <input type="text" class="f-text" id="f-lieu" placeholder="📍 Lieu d'exécution (ex: Gironde, 33, Bordeaux)" />
+
+        <select class="f-select" id="f-domaine" title="Domaine d'activité">
+          <option value="">Domaine : tous</option>
+          <option value="SERVICES">Services</option>
+          <option value="FOURNITURES">Fournitures</option>
+          <option value="TRAVAUX">Travaux</option>
+        </select>
+
+        <select class="f-select" id="f-famille" title="Type de marché public">
+          <option value="">Type de marché : tous</option>
+          <option value="Marchés européens">Marchés européens</option>
+          <option value="Marchés entre 90 k€ et seuils européens">90 k€ – seuils européens</option>
+          <option value="Marchés &lt;90 k€ (MAPA)">MAPA (&lt; 90 k€)</option>
+          <option value="Délégation de service public">Délégation de service public</option>
+          <option value="Divers">Divers</option>
+        </select>
+
+        <select class="f-select" id="f-procedure" title="Type de procédure">
+          <option value="">Procédure : toutes</option>
+          <option value="Procédure Ouverte">Ouverte</option>
+          <option value="Procédure Adaptée">Adaptée (MAPA)</option>
+          <option value="Procédure Négociée">Négociée</option>
+          <option value="Procédure Restreinte">Restreinte</option>
+          <option value="Procédure Dialogue compétitif">Dialogue compétitif</option>
+          <option value="Procédure Concours ouvert">Concours ouvert</option>
+          <option value="Procédure Concours restreint">Concours restreint</option>
+          <option value="Procédure Partenariat innovation">Partenariat d'innovation</option>
+        </select>
+
+        <select class="f-select" id="f-nature" title="Type d'avis">
+          <option value="">Type d'avis : tous</option>
+          <option value="Avis de marché">Avis de marché</option>
+          <option value="Résultat de marché">Résultat (attribution)</option>
+          <option value="Rectificatif">Rectificatif</option>
+          <option value="Avis d'intention de conclure">Intention de conclure</option>
+          <option value="Avis d'annulation">Annulation</option>
+          <option value="Avis informatif">Informatif</option>
+        </select>
+
+        <select class="f-select" id="f-etat" title="État de l'avis">
+          <option value="">État : tous</option>
+          <option value="en-cours">En cours</option>
+          <option value="cloture">Clôturé</option>
+        </select>
+
+        <!-- Date de publication -->
+        <div class="date-filter">
+          <button class="date-filter-btn" id="pub-btn">📅 Publication<span class="date-filter-badge" id="pub-badge" style="display:none"></span></button>
+          <div class="date-filter-panel" id="pub-panel">
+            <div class="df-row"><label>Publié à partir du</label><input type="date" id="pub-from" /></div>
+            <div class="df-row"><label>Jusqu'au</label><input type="date" id="pub-to" /></div>
+            <div class="df-actions"><button class="df-clear" id="pub-clear">Effacer</button><button class="df-apply" id="pub-apply">Appliquer</button></div>
+          </div>
+        </div>
+
+        <!-- Date de clôture -->
+        <div class="date-filter">
+          <button class="date-filter-btn" id="close-btn">⏰ Clôture<span class="date-filter-badge" id="close-badge" style="display:none"></span></button>
+          <div class="date-filter-panel" id="close-panel">
+            <div class="df-row"><label>Clôture à partir du</label><input type="date" id="close-from" /></div>
+            <div class="df-row"><label>Jusqu'au</label><input type="date" id="close-to" /></div>
+            <div class="df-actions"><button class="df-clear" id="close-clear">Effacer</button><button class="df-apply" id="close-apply">Appliquer</button></div>
+          </div>
+        </div>
+
+        <button class="f-reset" id="f-reset" title="Réinitialiser tous les critères">↺ Réinitialiser</button>
+      </div>
+
       <div class="search-meta">
         <label class="ai-analyze-toggle" id="ai-toggle">
           <div class="toggle on" id="ai-toggle-el"></div>
           <span class="toggle-label">Analyse IA</span>
         </label>
-
-        <div class="date-filter">
-          <button class="date-filter-btn" id="date-filter-btn">
-            📅 Période<span class="date-filter-badge" id="date-filter-badge" style="display:none"></span>
-          </button>
-          <div class="date-filter-panel" id="date-filter-panel">
-            <div class="df-row">
-              <label>Publié à partir du</label>
-              <input type="date" id="date-from" />
-            </div>
-            <div class="df-row">
-              <label>Jusqu'au</label>
-              <input type="date" id="date-to" />
-            </div>
-            <div class="df-actions">
-              <button class="df-clear" id="date-clear">Effacer</button>
-              <button class="df-apply" id="date-apply">Appliquer</button>
-            </div>
-          </div>
-        </div>
-
         <span class="result-count" id="result-count"></span>
       </div>
     </div>
@@ -966,9 +1049,12 @@ let sourceTotals = {};    // { sourceId: totalFromAPI }
 // Filtrage / pagination (affichage)
 const PAGE_SIZE = 10;
 let currentPage = 1;
-let dateFrom = null;       // 'YYYY-MM-DD' ou null
-let dateTo = null;         // 'YYYY-MM-DD' ou null
 let processedResults = []; // résultats filtrés + triés (cache du dernier rendu)
+
+// Critères de recherche (facettes)
+const facets = { typeMarche: '', famille: '', procedure: '', nature: '', etat: '' };
+const dateState = { pub: { from: null, to: null }, close: { from: null, to: null } };
+let lastFilters = null;
 
 // ─── Init ────────────────────────────────────────────────────────────────────
 async function init() {
@@ -1260,17 +1346,54 @@ document.getElementById('ai-toggle').addEventListener('click', () => {
 });
 
 // ─── Search ───────────────────────────────────────────────────────────────────
-document.getElementById('search-input').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') document.getElementById('search-btn').click();
+['search-input', 'f-secteur', 'f-lieu'].forEach(id => {
+  document.getElementById(id).addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') triggerSearch();
+  });
 });
+document.getElementById('search-btn').addEventListener('click', triggerSearch);
 
-document.getElementById('search-btn').addEventListener('click', async () => {
-  const query = document.getElementById('search-input').value.trim();
-  if (!query) return;
+// Rassemble tous les critères de l'interface en un objet de filtres.
+function gatherFilters() {
+  const precise = document.getElementById('search-input').value.trim();
+  const secteur = document.getElementById('f-secteur').value.trim();
+  const lieu    = document.getElementById('f-lieu').value.trim();
+  const text = [precise, secteur].filter(Boolean).join(' ');
 
+  const kwScan = geoScan(text, true);
+  const keywords = queryKeywords(text, kwScan.words);
+  const depts = [...new Set([...geoScan(lieu, true).zones, ...kwScan.zones])];
+
+  return {
+    text, precise, secteur, lieu, keywords, depts,
+    typeMarche: facets.typeMarche, famille: facets.famille, procedure: facets.procedure,
+    nature: facets.nature, etat: facets.etat,
+    pubFrom: dateState.pub.from, pubTo: dateState.pub.to,
+    closeFrom: dateState.close.from, closeTo: dateState.close.to
+  };
+}
+
+function hasAnyCriterion(f) {
+  return !!(f.keywords.length || f.depts.length || f.typeMarche || f.famille || f.procedure ||
+            f.nature || f.etat || f.pubFrom || f.pubTo || f.closeFrom || f.closeTo);
+}
+
+// Payload des facettes transmis aux sources (BOAMP).
+function facetPayload(f) {
+  return {
+    typeMarche: f.typeMarche, famille: f.famille, procedure: f.procedure, nature: f.nature,
+    etat: f.etat, pubFrom: f.pubFrom, pubTo: f.pubTo, closeFrom: f.closeFrom, closeTo: f.closeTo
+  };
+}
+
+async function triggerSearch() {
   const selected = [...selectedSources];
-  if (selected.length === 0) {
-    alert('Sélectionnez au moins une source.');
+  if (selected.length === 0) { alert('Sélectionnez au moins une source.'); return; }
+
+  if (!GEO_NAMES.size) await loadGeoReference();
+  const filters = gatherFilters();
+  if (!hasAnyCriterion(filters)) {
+    alert('Renseignez au moins un critère (recherche, secteur, lieu, ou un filtre).');
     return;
   }
 
@@ -1279,23 +1402,19 @@ document.getElementById('search-btn').addEventListener('click', async () => {
     document.getElementById('modal-overlay').classList.add('show');
     return;
   }
+  await runSearch(filters, selected, aiConfig);
+}
 
-  await runSearch(query, selected, aiConfig);
-});
-
-async function runSearch(query, selected, aiConfig) {
-  saveRecentSearch(query);
-  lastQuery = query;
+async function runSearch(filters, selected, aiConfig) {
+  if (filters.text) saveRecentSearch(filters.text);
+  lastFilters = filters;
+  lastQuery = filters.text;
   lastSelected = selected;
+  lastKeywords = filters.keywords;
+  lastDepts = filters.depts;
   sourceOffsets = {};
   sourceTotals = {};
   document.getElementById('load-more-wrap').style.display = 'none';
-
-  // Sépare le OÙ (zone) du QUOI (mots-clés) pour interroger les sources finement.
-  if (!GEO_NAMES.size) await loadGeoReference();
-  const qScan = geoScan(query, true);
-  lastKeywords = queryKeywords(query, qScan.words);
-  lastDepts = [...qScan.zones];
 
   // UI
   document.getElementById('welcome-state').style.display = 'none';
@@ -1326,8 +1445,9 @@ async function runSearch(query, selected, aiConfig) {
   // Search all sources in parallel
   allResults = [];
   let totalAvailable = 0;
+  const fp = facetPayload(filters);
   const searches = selected.map(async (sourceId) => {
-    const result = await window.api.searchSource({ sourceId, query, keywords: lastKeywords, depts: lastDepts });
+    const result = await window.api.searchSource({ sourceId, query: filters.text, keywords: filters.keywords, depts: filters.depts, facets: fp });
     const s = sources.find(x => x.id === sourceId);
     const badge = badges[sourceId];
 
@@ -1417,7 +1537,7 @@ async function loadMore() {
 
   const fetches = sourcesWithMore.map(async (sourceId) => {
     const offset = sourceOffsets[sourceId] || 0;
-    const result = await window.api.searchSource({ sourceId, query: lastQuery, offset, keywords: lastKeywords, depts: lastDepts });
+    const result = await window.api.searchSource({ sourceId, query: lastQuery, offset, keywords: lastKeywords, depts: lastDepts, facets: lastFilters ? facetPayload(lastFilters) : {} });
     if (!result.error && result.results && result.results.length > 0) {
       const s = sources.find(x => x.id === sourceId);
       result.results.forEach(r => allResults.push({ ...r, sourceId, sourceName: s?.name || sourceId }));
@@ -1435,57 +1555,77 @@ async function loadMore() {
 
 document.getElementById('load-more-btn').addEventListener('click', loadMore);
 
-// ─── Filtre de dates (menu déroulant) ──────────────────────────────────────────
-const dfBtn = document.getElementById('date-filter-btn');
-const dfPanel = document.getElementById('date-filter-panel');
-const dfBadge = document.getElementById('date-filter-badge');
-
-dfBtn.addEventListener('click', (e) => {
-  e.stopPropagation();
-  dfPanel.classList.toggle('show');
-});
-dfPanel.addEventListener('click', (e) => e.stopPropagation());
-document.addEventListener('click', () => dfPanel.classList.remove('show'));
-
-function fmtDateShort(iso) {
-  const [y, m, d] = iso.split('-');
-  return `${d}/${m}/${y.slice(2)}`;
-}
-
-function updateDateBadge() {
-  const active = !!(dateFrom || dateTo);
-  dfBtn.classList.toggle('active', active);
-  if (!active) { dfBadge.style.display = 'none'; return; }
-  let label = '';
-  if (dateFrom && dateTo)      label = `${fmtDateShort(dateFrom)} → ${fmtDateShort(dateTo)}`;
-  else if (dateFrom)           label = `dès ${fmtDateShort(dateFrom)}`;
-  else                         label = `jusqu'au ${fmtDateShort(dateTo)}`;
-  dfBadge.textContent = label;
-  dfBadge.style.display = 'inline-block';
-}
-
-document.getElementById('date-apply').addEventListener('click', () => {
-  const f = document.getElementById('date-from').value;
-  const t = document.getElementById('date-to').value;
-  // Tolérance : si l'utilisateur inverse les bornes, on les remet dans l'ordre.
-  if (f && t && f > t) { dateFrom = t; dateTo = f; }
-  else { dateFrom = f || null; dateTo = t || null; }
-  document.getElementById('date-from').value = dateFrom || '';
-  document.getElementById('date-to').value = dateTo || '';
-  currentPage = 1;
-  updateDateBadge();
-  dfPanel.classList.remove('show');
-  if (lastQuery) refreshResults();
+// ─── Facettes : listes déroulantes ─────────────────────────────────────────────
+const FACET_SELECTS = { 'f-domaine': 'typeMarche', 'f-famille': 'famille',
+  'f-procedure': 'procedure', 'f-nature': 'nature', 'f-etat': 'etat' };
+Object.entries(FACET_SELECTS).forEach(([id, key]) => {
+  const el = document.getElementById(id);
+  el.addEventListener('change', () => {
+    facets[key] = el.value;
+    el.classList.toggle('active', !!el.value);
+    currentPage = 1;
+    if (lastFilters) triggerSearch(); // re-fetch (filtre serveur BOAMP)
+  });
 });
 
-document.getElementById('date-clear').addEventListener('click', () => {
-  dateFrom = dateTo = null;
-  document.getElementById('date-from').value = '';
-  document.getElementById('date-to').value = '';
-  currentPage = 1;
-  updateDateBadge();
-  dfPanel.classList.remove('show');
-  if (lastQuery) refreshResults();
+// ─── Bulles de dates (publication + clôture) ────────────────────────────────────
+function fmtDateShort(iso) { const [y, m, d] = iso.split('-'); return `${d}/${m}/${y.slice(2)}`; }
+
+function setupDateBubble(kind) {
+  const btn = document.getElementById(`${kind}-btn`);
+  const panel = document.getElementById(`${kind}-panel`);
+  const badge = document.getElementById(`${kind}-badge`);
+  const fromEl = document.getElementById(`${kind}-from`);
+  const toEl = document.getElementById(`${kind}-to`);
+  const st = dateState[kind === 'pub' ? 'pub' : 'close'];
+
+  btn.addEventListener('click', (e) => { e.stopPropagation(); panel.classList.toggle('show'); });
+  panel.addEventListener('click', (e) => e.stopPropagation());
+
+  function updateBadge() {
+    const active = !!(st.from || st.to);
+    btn.classList.toggle('active', active);
+    if (!active) { badge.style.display = 'none'; return; }
+    badge.textContent = st.from && st.to ? `${fmtDateShort(st.from)} → ${fmtDateShort(st.to)}`
+      : st.from ? `dès ${fmtDateShort(st.from)}` : `jusqu'au ${fmtDateShort(st.to)}`;
+    badge.style.display = 'inline-block';
+  }
+
+  document.getElementById(`${kind}-apply`).addEventListener('click', () => {
+    const f = fromEl.value, t = toEl.value;
+    if (f && t && f > t) { st.from = t; st.to = f; } else { st.from = f || null; st.to = t || null; }
+    fromEl.value = st.from || ''; toEl.value = st.to || '';
+    currentPage = 1; updateBadge(); panel.classList.remove('show');
+    if (lastFilters) triggerSearch();
+  });
+  document.getElementById(`${kind}-clear`).addEventListener('click', () => {
+    st.from = st.to = null; fromEl.value = ''; toEl.value = '';
+    currentPage = 1; updateBadge(); panel.classList.remove('show');
+    if (lastFilters) triggerSearch();
+  });
+}
+setupDateBubble('pub');
+setupDateBubble('close');
+document.addEventListener('click', () => {
+  document.getElementById('pub-panel').classList.remove('show');
+  document.getElementById('close-panel').classList.remove('show');
+});
+
+// ─── Réinitialiser tous les critères ────────────────────────────────────────────
+document.getElementById('f-reset').addEventListener('click', () => {
+  document.getElementById('search-input').value = '';
+  document.getElementById('f-secteur').value = '';
+  document.getElementById('f-lieu').value = '';
+  Object.keys(facets).forEach(k => facets[k] = '');
+  Object.keys(FACET_SELECTS).forEach(id => { const el = document.getElementById(id); el.value = ''; el.classList.remove('active'); });
+  dateState.pub = { from: null, to: null };
+  dateState.close = { from: null, to: null };
+  ['pub', 'close'].forEach(kind => {
+    document.getElementById(`${kind}-from`).value = '';
+    document.getElementById(`${kind}-to`).value = '';
+    document.getElementById(`${kind}-badge`).style.display = 'none';
+    document.getElementById(`${kind}-btn`).classList.remove('active');
+  });
 });
 
 // ─── Normalisation ─────────────────────────────────────────────────────────────
@@ -1609,20 +1749,29 @@ function parseResultDate(d) {
   if (m && FR_MONTHS[m[2]] != null) return new Date(+m[3], FR_MONTHS[m[2]], +m[1]);
   return null;
 }
-function inDateRange(result) {
-  if (!dateFrom && !dateTo) return true;
-  const d = parseResultDate(result.date);
-  if (!d) return true; // date illisible → on ne masque pas (éviter de perdre des résultats valides)
-  if (dateFrom && d < new Date(dateFrom + 'T00:00:00')) return false;
-  if (dateTo && d > new Date(dateTo + 'T23:59:59')) return false;
+// Vérifie qu'une date (chaîne) est dans une plage { from, to } (illisible → conservée).
+function dateInRange(value, range) {
+  if (!range.from && !range.to) return true;
+  const d = parseResultDate(value);
+  if (!d) return true;
+  if (range.from && d < new Date(range.from + 'T00:00:00')) return false;
+  if (range.to && d > new Date(range.to + 'T23:59:59')) return false;
   return true;
 }
 
-// ─── Pipeline : filtrage (mots-clés + dates) puis tri par pertinence ───────────
+// Filtre client "état" (en cours / clôturé) via la date limite de réponse.
+function passEtat(result) {
+  if (!facets.etat) return true;
+  const d = parseResultDate(result.datelimite);
+  if (!d) return true; // date de clôture inconnue → on ne masque pas
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  return facets.etat === 'en-cours' ? d >= today : d < today;
+}
+
+// ─── Pipeline : filtrage (mots-clés + zone + dates + état) puis tri par pertinence ─
 function getProcessedResults() {
-  const qScan = geoScan(lastQuery, true);
-  const queryZones = qScan.zones;
-  const keywords = queryKeywords(lastQuery, qScan.words);
+  const queryZones = new Set(lastDepts);
+  const keywords = lastKeywords;
 
   const relMap = {};
   if (aiAnalysis?.relevant) aiAnalysis.relevant.forEach(r => { relMap[r.index] = r; });
@@ -1634,8 +1783,10 @@ function getProcessedResults() {
              _geoMismatch: c.geoMismatch, _score: ai ? ai.score : c.score };
   });
 
-  // Filtre de période
-  list = list.filter(inDateRange);
+  // Filtres de dates (publication + clôture) et d'état
+  list = list.filter(r => dateInRange(r.date, dateState.pub)
+                       && dateInRange(r.datelimite, dateState.close)
+                       && passEtat(r));
 
   // Filtre géographique : si la requête cible une zone, on écarte les annonces
   // d'une AUTRE zone clairement identifiée (sauf si l'IA les juge très pertinentes).
@@ -1764,7 +1915,7 @@ function makeCard(result, highlighted) {
       </div>
     ` : ''}
     <div class="card-footer">
-      <span class="card-date">${result.date ? '📅 ' + result.date : ''}</span>
+      <span class="card-date">${result.date ? '📅 ' + result.date : ''}${result.datelimite ? '   ⏰ clôture ' + result.datelimite : ''}${result.procedure ? '   · ' + escHtml(result.procedure) : ''}</span>
       <a class="card-link" href="#">Ouvrir →</a>
     </div>
   `;
