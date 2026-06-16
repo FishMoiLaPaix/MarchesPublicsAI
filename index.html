@@ -1108,6 +1108,7 @@ async function init() {
   sources.forEach(s => selectedSources.add(s.id));
   updateSelectAll();
   renderSourceFilter(); // peuple la bulle "Sources"
+  await restoreFilterState(); // restaure les derniers critères saisis
 
   loadGeoReference(); // charge le référentiel géo officiel (en cache après 1er lancement)
 
@@ -1453,7 +1454,66 @@ async function triggerSearch() {
     document.getElementById('modal-overlay').classList.add('show');
     return;
   }
+  saveFilterState(); // mémorise les critères pour les restaurer au prochain lancement
   await runSearch(filters, selected, aiConfig);
+}
+
+// ─── Mémorisation / restauration des derniers critères ──────────────────────────
+function saveFilterState() {
+  storeSet('last-filters', {
+    precise: document.getElementById('search-input').value,
+    secteur: document.getElementById('f-secteur').value,
+    lieu: document.getElementById('f-lieu').value,
+    facets: { ...facets },
+    pub: { ...dateState.pub },
+    close: { ...dateState.close },
+    sources: [...selectedSources]
+  });
+}
+
+async function restoreFilterState() {
+  const st = await storeGet('last-filters');
+  if (!st) return;
+  document.getElementById('search-input').value = st.precise || '';
+  document.getElementById('f-secteur').value = st.secteur || '';
+  document.getElementById('f-lieu').value = st.lieu || '';
+
+  if (st.facets) Object.keys(facets).forEach(k => facets[k] = st.facets[k] || '');
+  Object.entries(FACET_SELECTS).forEach(([id, key]) => {
+    const el = document.getElementById(id);
+    el.value = facets[key] || '';
+    el.classList.toggle('active', !!facets[key]);
+  });
+
+  dateState.pub = { from: (st.pub && st.pub.from) || null, to: (st.pub && st.pub.to) || null };
+  dateState.close = { from: (st.close && st.close.from) || null, to: (st.close && st.close.to) || null };
+  ['pub', 'close'].forEach(kind => {
+    const s = dateState[kind];
+    document.getElementById(`${kind}-from`).value = s.from || '';
+    document.getElementById(`${kind}-to`).value = s.to || '';
+    const active = !!(s.from || s.to);
+    document.getElementById(`${kind}-btn`).classList.toggle('active', active);
+    const badge = document.getElementById(`${kind}-badge`);
+    if (active) {
+      badge.textContent = s.from && s.to ? `${fmtDateShort(s.from)} → ${fmtDateShort(s.to)}`
+        : s.from ? `dès ${fmtDateShort(s.from)}` : `jusqu'au ${fmtDateShort(s.to)}`;
+      badge.style.display = 'inline-block';
+    } else { badge.style.display = 'none'; }
+  });
+
+  if (Array.isArray(st.sources) && st.sources.length) {
+    selectedSources = new Set(st.sources.filter(id => sources.some(s => s.id === id)));
+    syncSourceUI();
+  }
+  updateFiltersCount();
+
+  // Ouvre la barre de filtres si des critères avancés étaient renseignés.
+  const advanced = !!(st.secteur || st.lieu || Object.values(facets).some(Boolean)
+    || dateState.pub.from || dateState.pub.to || dateState.close.from || dateState.close.to);
+  if (advanced) {
+    document.getElementById('fbar').classList.add('show');
+    document.getElementById('filters-toggle').classList.add('active');
+  }
 }
 
 async function runSearch(filters, selected, aiConfig) {
@@ -1741,6 +1801,8 @@ document.getElementById('f-reset').addEventListener('click', () => {
     document.getElementById(`${kind}-badge`).style.display = 'none';
     document.getElementById(`${kind}-btn`).classList.remove('active');
   });
+  updateFiltersCount();
+  saveFilterState();
 });
 
 // ─── Normalisation ─────────────────────────────────────────────────────────────

@@ -109,6 +109,31 @@ function boampWhere(opts = {}) {
 }
 const BOAMP_RECORDS = 'https://boamp-datadila.opendatasoft.com/api/explore/v2.1/catalog/datasets/boamp/records';
 
+// Recherche TED / JOUE via l'API officielle v3 (l'ancienne v2.0 est décommissionnée).
+// franceOnly=true → restreint aux avis concernant la France (CY=FRA) : c'est le
+// périmètre du Journal Officiel de l'UE (JOUE) pertinent pour un acheteur français.
+async function tedSearch(query, offset = 0, opts = {}, franceOnly = false) {
+  const esc = s => String(s).replace(/["\\]/g, ' ').trim();
+  const kws = (Array.isArray(opts.keywords) && opts.keywords.length)
+    ? opts.keywords : String(query || '').split(/\s+/).filter(w => w.length >= 3);
+  const parts = [];
+  if (kws.length) parts.push(`FT~"${kws.map(esc).join(' ')}"`);
+  if (franceOnly) parts.push('CY=FRA');
+  let q = (parts.join(' AND ') || 'PD>=20180101') + ' SORT BY PD DESC';
+  const limit = 25;
+  const page = Math.floor(offset / limit) + 1;
+  const data = await postJson('https://api.ted.europa.eu/v3/notices/search',
+    { query: q, fields: ['ND', 'TI', 'PD'], page, limit, scope: 'ALL' });
+  const pick = ti => ti ? (ti.fra || ti.eng || Object.values(ti)[0] || '') : '';
+  const items = (data.notices || []).map(n => ({
+    title: String(pick(n.TI) || n.ND || 'Avis JOUE'),
+    desc: '',
+    date: (n.PD || '').slice(0, 10),
+    url: n.ND ? `https://ted.europa.eu/fr/notice/-/detail/${n.ND}` : 'https://ted.europa.eu'
+  })).filter(r => r.title);
+  return { results: items, total: data.totalNoticeCount || items.length };
+}
+
 const SOURCES = [
   {
     id: 'boamp',
@@ -173,28 +198,17 @@ const SOURCES = [
     id: 'ted',
     name: 'TED Europa',
     country: '🇪🇺',
-    description: 'Tenders Electronic Daily — Marchés européens',
+    description: 'Tenders Electronic Daily — tous marchés européens',
     url: 'https://ted.europa.eu',
-    search: async (query, offset = 0) => {
-      const getStr = (f) => {
-        if (!f) return '';
-        if (typeof f === 'string') return f;
-        if (Array.isArray(f)) return getStr(f[0]);
-        if (typeof f === 'object') return Object.values(f).find(v => v) || '';
-        return String(f);
-      };
-      const q = encodeURIComponent(query);
-      const apiUrl = `https://ted.europa.eu/api/v2.0/notices/search?fields=ND,TI,PD,MA,XY&q=${q}&scope=3&limit=25&offset=${offset}&sortField=ND&sortOrder=DESC`;
-      const data = await fetchJson(apiUrl);
-      const notices = data.results || data.notices || [];
-      const items = notices.map(n => ({
-        title: getStr(n.TI) || getStr(n.ND) || 'Avis TED Europa',
-        desc: getStr(n.MA) || getStr(n.XY) || '',
-        date: getStr(n.PD).slice(0, 10),
-        url: getStr(n.ND) ? `https://ted.europa.eu/en/notice/-/detail/${getStr(n.ND)}` : 'https://ted.europa.eu'
-      })).filter(r => r.title);
-      return { results: items, total: data.totalNoticeCount || items.length };
-    }
+    search: (query, offset = 0, opts = {}) => tedSearch(query, offset, opts, false)
+  },
+  {
+    id: 'joue',
+    name: 'J.O.U.E',
+    country: '🇪🇺',
+    description: 'Journal Officiel de l\'Union Européenne — avis concernant la France',
+    url: 'https://ted.europa.eu',
+    search: (query, offset = 0, opts = {}) => tedSearch(query, offset, opts, true)
   },
   {
     id: 'demat-ampa',
@@ -511,6 +525,32 @@ function fetchJson(url, timeout = 15000) {
     });
     req.on('error', reject);
     req.on('timeout', () => { req.destroy(); reject(new Error('Timeout')); });
+  });
+}
+
+// POST JSON (utilisé par l'API TED v3).
+function postJson(url, body, timeout = 20000) {
+  return new Promise((resolve, reject) => {
+    const data = JSON.stringify(body);
+    const req = https.request(url, {
+      method: 'POST',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(data)
+      },
+      timeout
+    }, (res) => {
+      if (res.statusCode >= 400) { res.resume(); return reject(new Error(`HTTP ${res.statusCode}`)); }
+      let d = '';
+      res.on('data', c => d += c);
+      res.on('end', () => { try { resolve(JSON.parse(d)); } catch { reject(new Error('Réponse non-JSON: ' + d.slice(0, 120))); } });
+    });
+    req.on('error', reject);
+    req.on('timeout', () => { req.destroy(); reject(new Error('Timeout')); });
+    req.write(data);
+    req.end();
   });
 }
 
