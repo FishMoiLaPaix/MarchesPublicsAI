@@ -1044,8 +1044,14 @@
 
     <!-- Recherches récentes -->
     <div class="recent-wrap" id="recent-wrap" style="display:none">
-      <span class="recent-label">Récent :</span>
+      <span class="recent-label">Recherches :</span>
       <div class="recent-chips-row" id="recent-chips"></div>
+    </div>
+
+    <!-- Mots-clés récents (barre ;-séparée) -->
+    <div class="recent-wrap" id="recent-kw-wrap" style="display:none">
+      <span class="recent-label">Mots-clés :</span>
+      <div class="recent-chips-row" id="recent-kw-chips"></div>
     </div>
 
     <!-- Results -->
@@ -1141,11 +1147,13 @@ async function init() {
     updateProviderUI();
   }
 
-  const [recentSearches, recentConfigs] = await Promise.all([
+  const [recentSearches, recentKeywords, recentConfigs] = await Promise.all([
     storeGet('recent-searches'),
+    storeGet('recent-keywords'),
     storeGet('recent-configs')
   ]);
   renderRecentSearches(recentSearches || []);
+  renderRecentKeywords(recentKeywords || []);
   renderRecentConfigs(recentConfigs || []);
   updateSaveCfgRow();
 }
@@ -1204,6 +1212,43 @@ function renderRecentSearches(list) {
       cur = cur.filter(x => x !== q);
       await storeSet('recent-searches', cur);
       renderRecentSearches(cur);
+    });
+    chips.appendChild(chip);
+  });
+}
+
+// ─── Mots-clés récents (barre ;-séparée, historique distinct) ───────────────────
+async function saveRecentKeywords(value) {
+  if (!value || value.length < 2) return;
+  let list = (await storeGet('recent-keywords')) || [];
+  list = list.filter(q => q !== value);
+  list.unshift(value);
+  if (list.length > 8) list = list.slice(0, 8);
+  await storeSet('recent-keywords', list);
+  renderRecentKeywords(list);
+}
+
+function renderRecentKeywords(list) {
+  const wrap = document.getElementById('recent-kw-wrap');
+  const chips = document.getElementById('recent-kw-chips');
+  if (!list || !list.length) { wrap.style.display = 'none'; return; }
+  wrap.style.display = 'flex';
+  chips.innerHTML = '';
+  list.forEach((q) => {
+    const chip = document.createElement('span');
+    chip.className = 'recent-chip';
+    chip.innerHTML = `<span class="recent-chip-text">${escHtml(q)}</span><button class="recent-chip-del" title="Supprimer">×</button>`;
+    chip.querySelector('.recent-chip-text').addEventListener('click', () => {
+      document.getElementById('f-keywords').value = q;
+      updateFiltersCount();
+      triggerSearch();
+    });
+    chip.querySelector('.recent-chip-del').addEventListener('click', async (e) => {
+      e.stopPropagation();
+      let cur = (await storeGet('recent-keywords')) || [];
+      cur = cur.filter(x => x !== q);
+      await storeSet('recent-keywords', cur);
+      renderRecentKeywords(cur);
     });
     chips.appendChild(chip);
   });
@@ -1463,7 +1508,7 @@ function gatherFilters() {
   const scraperText = [...rawGroups, lieu].filter(Boolean).join(' ');
 
   return {
-    text: rawGroups.join(' '), scraperText, precise, secteur, lieu,
+    text: rawGroups.join(' '), scraperText, precise, kwBar, secteur, lieu,
     groups, keywordGroups, keywordMode, depts,
     typeMarche: facets.typeMarche, famille: facets.famille, procedure: facets.procedure,
     nature: facets.nature, etat: facets.etat,
@@ -1571,7 +1616,9 @@ async function restoreFilterState() {
 }
 
 async function runSearch(filters, selected, aiConfig) {
-  if (filters.text) saveRecentSearch(filters.text);
+  // Historiques distincts : barre de recherche (précise) vs barre de mots-clés (;).
+  if (filters.precise) saveRecentSearch(filters.precise);
+  if (filters.kwBar) saveRecentKeywords(filters.kwBar);
   lastFilters = filters;
   lastQuery = filters.text;
   lastSelected = selected;
