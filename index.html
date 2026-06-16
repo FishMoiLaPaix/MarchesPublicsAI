@@ -958,6 +958,8 @@ let allResults = [];
 let aiAnalysis = null;
 let lastQuery = '';
 let lastSelected = [];
+let lastKeywords = [];
+let lastDepts = [];
 let sourceOffsets = {};   // { sourceId: nextOffset }
 let sourceTotals = {};    // { sourceId: totalFromAPI }
 
@@ -1289,6 +1291,12 @@ async function runSearch(query, selected, aiConfig) {
   sourceTotals = {};
   document.getElementById('load-more-wrap').style.display = 'none';
 
+  // Sépare le OÙ (zone) du QUOI (mots-clés) pour interroger les sources finement.
+  if (!GEO_NAMES.size) await loadGeoReference();
+  const qScan = geoScan(query, true);
+  lastKeywords = queryKeywords(query, qScan.words);
+  lastDepts = [...qScan.zones];
+
   // UI
   document.getElementById('welcome-state').style.display = 'none';
   document.getElementById('ai-panel').classList.remove('visible');
@@ -1319,7 +1327,7 @@ async function runSearch(query, selected, aiConfig) {
   allResults = [];
   let totalAvailable = 0;
   const searches = selected.map(async (sourceId) => {
-    const result = await window.api.searchSource({ sourceId, query });
+    const result = await window.api.searchSource({ sourceId, query, keywords: lastKeywords, depts: lastDepts });
     const s = sources.find(x => x.id === sourceId);
     const badge = badges[sourceId];
 
@@ -1409,7 +1417,7 @@ async function loadMore() {
 
   const fetches = sourcesWithMore.map(async (sourceId) => {
     const offset = sourceOffsets[sourceId] || 0;
-    const result = await window.api.searchSource({ sourceId, query: lastQuery, offset });
+    const result = await window.api.searchSource({ sourceId, query: lastQuery, offset, keywords: lastKeywords, depts: lastDepts });
     if (!result.error && result.results && result.results.length > 0) {
       const s = sources.find(x => x.id === sourceId);
       result.results.forEach(r => allResults.push({ ...r, sourceId, sourceName: s?.name || sourceId }));

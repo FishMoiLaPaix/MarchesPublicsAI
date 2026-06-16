@@ -75,6 +75,25 @@ ipcMain.on('set-theme', (event, theme) => {
 });
 
 // ─── Scraper: sources de marchés publics ────────────────────────────────────
+
+// Construit une clause ODSQL "where" pour BOAMP : recherche les mots-clés DANS
+// l'objet du marché (et non un q= plein-texte inopérant) et filtre par
+// département officiel. Sépare ainsi le QUOI (mots-clés) du OÙ (zone).
+function boampWhere(query, opts = {}) {
+  const esc = s => String(s).replace(/["\\]/g, ' ').trim();
+  const hasKw = Array.isArray(opts.keywords);
+  const kws = (hasKw ? opts.keywords : String(query).split(/\s+/)).map(esc).filter(w => w.length >= 3);
+  const depts = Array.isArray(opts.depts) ? opts.depts : [];
+  const clauses = [];
+  kws.forEach(w => clauses.push(`objet like "${w}"`));
+  if (depts.length) {
+    const dq = depts.map(d => `code_departement="${esc(d)}" or code_departement_prestation="${esc(d)}"`).join(' or ');
+    clauses.push(`(${dq})`);
+  }
+  return clauses.join(' and ');
+}
+const BOAMP_RECORDS = 'https://boamp-datadila.opendatasoft.com/api/explore/v2.1/catalog/datasets/boamp/records';
+
 const SOURCES = [
   {
     id: 'boamp',
@@ -82,9 +101,10 @@ const SOURCES = [
     country: '🇫🇷',
     description: 'Bulletin Officiel des Annonces de Marchés Publics',
     url: 'https://www.boamp.fr',
-    search: async (query, offset = 0) => {
-      const encoded = encodeURIComponent(query);
-      const url = `https://boamp-datadila.opendatasoft.com/api/explore/v2.1/catalog/datasets/boamp/records?q=${encoded}&limit=50&offset=${offset}&order_by=dateparution%20desc`;
+    search: async (query, offset = 0, opts = {}) => {
+      const where = boampWhere(query, opts);
+      let url = `${BOAMP_RECORDS}?limit=50&offset=${offset}&order_by=${encodeURIComponent('dateparution desc')}`;
+      url += where ? `&where=${encodeURIComponent(where)}` : `&q=${encodeURIComponent(query)}`;
       const data = await fetchJson(url);
       const items = (data.results || [])
         .map(r => ({
@@ -349,9 +369,12 @@ const SOURCES = [
     country: '🇫🇷',
     description: 'Avis d\'attribution BOAMP (contrats récemment attribués)',
     url: 'https://www.boamp.fr',
-    search: async (query, offset = 0) => {
-      const encoded = encodeURIComponent(query);
-      const url = `https://boamp-datadila.opendatasoft.com/api/explore/v2.1/catalog/datasets/boamp/records?q=${encoded}&where=nature%3D%22ATTRIBUTION%22&limit=50&offset=${offset}&order_by=dateparution%20desc`;
+    search: async (query, offset = 0, opts = {}) => {
+      const parts = ['nature="ATTRIBUTION"'];
+      const w = boampWhere(query, opts);
+      if (w) parts.push(w);
+      const where = parts.join(' and ');
+      const url = `${BOAMP_RECORDS}?where=${encodeURIComponent(where)}&limit=50&offset=${offset}&order_by=${encodeURIComponent('dateparution desc')}`;
       const data = await fetchJson(url);
       const items = (data.results || [])
         .map(r => ({
@@ -539,11 +562,11 @@ async function callAI(config, systemPrompt, userPrompt) {
 // ─── IPC handlers ────────────────────────────────────────────────────────────
 ipcMain.handle('get-sources', () => SOURCES.map(s => ({ id: s.id, name: s.name, country: s.country, description: s.description, url: s.url })));
 
-ipcMain.handle('search-source', async (_, { sourceId, query, offset = 0 }) => {
+ipcMain.handle('search-source', async (_, { sourceId, query, offset = 0, keywords, depts }) => {
   const source = SOURCES.find(s => s.id === sourceId);
   if (!source) return { sourceId, results: [], total: 0, error: 'Source inconnue' };
   try {
-    const raw = await source.search(query, offset);
+    const raw = await source.search(query, offset, { keywords, depts });
     const results = Array.isArray(raw) ? raw : (raw.results || []);
     const total = Array.isArray(raw) ? raw.length : (raw.total || results.length);
     return { sourceId, results, total };
