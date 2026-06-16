@@ -698,11 +698,39 @@
   .load-more-btn:disabled { opacity: .5; cursor: default; }
   .load-more-info { font-size: 12px; color: var(--text3); }
 
+  /* ─── Bouton Filtres ──────────────────────────────────────── */
+  .filters-toggle {
+    display: flex; align-items: center; gap: 7px; flex-shrink: 0;
+    padding: 12px 16px; background: var(--surface2); border: 1.5px solid var(--border);
+    border-radius: var(--radius); color: var(--text2); font-size: 14px; font-weight: 600;
+    cursor: pointer; transition: all .15s;
+  }
+  .filters-toggle:hover { border-color: var(--blue); color: var(--blue); }
+  .filters-toggle.active { border-color: var(--blue); color: var(--blue); background: var(--blue-glow); }
+  .filters-count {
+    font-size: 10px; font-weight: 700; background: var(--blue); color: #fff;
+    border-radius: 9px; padding: 1px 6px; min-width: 16px; text-align: center;
+  }
+
   /* ─── Barre de critères (facettes) ────────────────────────── */
   .fbar {
-    display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+    display: none; flex-wrap: wrap; gap: 8px; align-items: center;
     margin-top: 12px;
   }
+  .fbar.show { display: flex; }
+
+  /* Liste des sources dans la bulle */
+  .src-opt {
+    display: flex; align-items: center; gap: 8px; padding: 6px 7px;
+    border-radius: var(--radius-sm); cursor: pointer; font-size: 12px; color: var(--text2);
+  }
+  .src-opt:hover { background: var(--surface2); }
+  .src-opt .src-cb {
+    width: 15px; height: 15px; border: 2px solid var(--border2); border-radius: 4px;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .src-opt .src-cb.checked { background: var(--blue); border-color: var(--blue); }
+  .src-opt .src-cb.checked::after { content: '✓'; color: #fff; font-size: 9px; font-weight: 700; }
   .f-text {
     background: var(--bg3); border: 1px solid var(--border);
     border-radius: var(--radius-sm); color: var(--text);
@@ -897,12 +925,16 @@
           <div class="spinner" id="search-spinner"></div>
           <span id="search-btn-text">Rechercher</span>
         </button>
+        <button class="filters-toggle" id="filters-toggle" title="Afficher / masquer les filtres">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+          Filtres<span class="filters-count" id="filters-count" style="display:none"></span>
+        </button>
       </div>
 
       <!-- Barre de critères (facettes) -->
       <div class="fbar" id="fbar">
-        <input type="text" class="f-text" id="f-secteur" placeholder="🔎 Secteur d'activité (ex: équipement sportif)" />
-        <input type="text" class="f-text" id="f-lieu" placeholder="📍 Lieu d'exécution (ex: Gironde, 33, Bordeaux)" />
+        <input type="text" class="f-text" id="f-secteur" placeholder="🔎 Secteur d'activité" />
+        <input type="text" class="f-text" id="f-lieu" placeholder="📍 Lieu d'exécution" />
 
         <select class="f-select" id="f-domaine" title="Domaine d'activité">
           <option value="">Domaine : tous</option>
@@ -934,12 +966,13 @@
 
         <select class="f-select" id="f-nature" title="Type d'avis">
           <option value="">Type d'avis : tous</option>
-          <option value="Avis de marché">Avis de marché</option>
-          <option value="Résultat de marché">Résultat (attribution)</option>
-          <option value="Rectificatif">Rectificatif</option>
-          <option value="Avis d'intention de conclure">Intention de conclure</option>
-          <option value="Avis d'annulation">Annulation</option>
-          <option value="Avis informatif">Informatif</option>
+          <option value="APPEL_OFFRE">AAPC (avis de marché)</option>
+          <option value="ATTRIBUTION">Avis d'attribution</option>
+          <option value="RECTIFICATIF">Rectificatif</option>
+          <option value="INTENTION_CONCLURE">Intention de conclure</option>
+          <option value="PRE-INFORMATION">Pré-information / périodique</option>
+          <option value="MODIFICATION">Modification</option>
+          <option value="ANNULATION">Annulation</option>
         </select>
 
         <select class="f-select" id="f-etat" title="État de l'avis">
@@ -965,6 +998,18 @@
             <div class="df-row"><label>Clôture à partir du</label><input type="date" id="close-from" /></div>
             <div class="df-row"><label>Jusqu'au</label><input type="date" id="close-to" /></div>
             <div class="df-actions"><button class="df-clear" id="close-clear">Effacer</button><button class="df-apply" id="close-apply">Appliquer</button></div>
+          </div>
+        </div>
+
+        <!-- Source des appels d'offres -->
+        <div class="date-filter">
+          <button class="date-filter-btn" id="src-btn">📚 Sources<span class="date-filter-badge" id="src-badge" style="display:none"></span></button>
+          <div class="date-filter-panel" id="src-panel" style="width:250px">
+            <div class="df-row" style="display:flex;justify-content:space-between;gap:6px;margin-bottom:8px">
+              <button class="df-clear" id="src-all" style="flex:1">Tout</button>
+              <button class="df-clear" id="src-none" style="flex:1">Aucune</button>
+            </div>
+            <div id="src-list" style="max-height:230px;overflow-y:auto"></div>
           </div>
         </div>
 
@@ -1062,6 +1107,7 @@ async function init() {
   renderSources();
   sources.forEach(s => selectedSources.add(s.id));
   updateSelectAll();
+  renderSourceFilter(); // peuple la bulle "Sources"
 
   loadGeoReference(); // charge le référentiel géo officiel (en cache après 1er lancement)
 
@@ -1321,6 +1367,7 @@ function toggleSource(id) {
   else selectedSources.add(id);
   document.getElementById('cb-' + id)?.classList.toggle('checked', selectedSources.has(id));
   updateSelectAll();
+  renderSourceFilter(); // refléter dans la bulle "Sources"
 }
 
 function updateSelectAll() {
@@ -1337,6 +1384,7 @@ document.getElementById('select-all-btn').addEventListener('click', () => {
     document.getElementById('cb-' + s.id)?.classList.toggle('checked', !allSelected);
   });
   updateSelectAll();
+  renderSourceFilter();
 });
 
 // ─── AI toggle ───────────────────────────────────────────────────────────────
@@ -1363,9 +1411,12 @@ function gatherFilters() {
   const kwScan = geoScan(text, true);
   const keywords = queryKeywords(text, kwScan.words);
   const depts = [...new Set([...geoScan(lieu, true).zones, ...kwScan.zones])];
+  // Texte transmis aux sources NON-BOAMP (PLACE, Demat-AMPA, etc.) : on inclut le
+  // lieu pour que leur propre moteur de recherche filtre aussi par localisation.
+  const scraperText = [precise, secteur, lieu].filter(Boolean).join(' ');
 
   return {
-    text, precise, secteur, lieu, keywords, depts,
+    text, scraperText, precise, secteur, lieu, keywords, depts,
     typeMarche: facets.typeMarche, famille: facets.famille, procedure: facets.procedure,
     nature: facets.nature, etat: facets.etat,
     pubFrom: dateState.pub.from, pubTo: dateState.pub.to,
@@ -1447,7 +1498,7 @@ async function runSearch(filters, selected, aiConfig) {
   let totalAvailable = 0;
   const fp = facetPayload(filters);
   const searches = selected.map(async (sourceId) => {
-    const result = await window.api.searchSource({ sourceId, query: filters.text, keywords: filters.keywords, depts: filters.depts, facets: fp });
+    const result = await window.api.searchSource({ sourceId, query: filters.scraperText, keywords: filters.keywords, depts: filters.depts, facets: fp });
     const s = sources.find(x => x.id === sourceId);
     const badge = badges[sourceId];
 
@@ -1537,7 +1588,7 @@ async function loadMore() {
 
   const fetches = sourcesWithMore.map(async (sourceId) => {
     const offset = sourceOffsets[sourceId] || 0;
-    const result = await window.api.searchSource({ sourceId, query: lastQuery, offset, keywords: lastKeywords, depts: lastDepts, facets: lastFilters ? facetPayload(lastFilters) : {} });
+    const result = await window.api.searchSource({ sourceId, query: lastFilters ? lastFilters.scraperText : lastQuery, offset, keywords: lastKeywords, depts: lastDepts, facets: lastFilters ? facetPayload(lastFilters) : {} });
     if (!result.error && result.results && result.results.length > 0) {
       const s = sources.find(x => x.id === sourceId);
       result.results.forEach(r => allResults.push({ ...r, sourceId, sourceName: s?.name || sourceId }));
@@ -1564,9 +1615,11 @@ Object.entries(FACET_SELECTS).forEach(([id, key]) => {
     facets[key] = el.value;
     el.classList.toggle('active', !!el.value);
     currentPage = 1;
+    updateFiltersCount();
     if (lastFilters) triggerSearch(); // re-fetch (filtre serveur BOAMP)
   });
 });
+['f-secteur', 'f-lieu'].forEach(id => document.getElementById(id).addEventListener('input', updateFiltersCount));
 
 // ─── Bulles de dates (publication + clôture) ────────────────────────────────────
 function fmtDateShort(iso) { const [y, m, d] = iso.split('-'); return `${d}/${m}/${y.slice(2)}`; }
@@ -1595,12 +1648,12 @@ function setupDateBubble(kind) {
     const f = fromEl.value, t = toEl.value;
     if (f && t && f > t) { st.from = t; st.to = f; } else { st.from = f || null; st.to = t || null; }
     fromEl.value = st.from || ''; toEl.value = st.to || '';
-    currentPage = 1; updateBadge(); panel.classList.remove('show');
+    currentPage = 1; updateBadge(); updateFiltersCount(); panel.classList.remove('show');
     if (lastFilters) triggerSearch();
   });
   document.getElementById(`${kind}-clear`).addEventListener('click', () => {
     st.from = st.to = null; fromEl.value = ''; toEl.value = '';
-    currentPage = 1; updateBadge(); panel.classList.remove('show');
+    currentPage = 1; updateBadge(); updateFiltersCount(); panel.classList.remove('show');
     if (lastFilters) triggerSearch();
   });
 }
@@ -1609,7 +1662,69 @@ setupDateBubble('close');
 document.addEventListener('click', () => {
   document.getElementById('pub-panel').classList.remove('show');
   document.getElementById('close-panel').classList.remove('show');
+  document.getElementById('src-panel').classList.remove('show');
 });
+
+// ─── Bouton Filtres (replier/déplier la barre de critères) ──────────────────────
+document.getElementById('filters-toggle').addEventListener('click', () => {
+  const fbar = document.getElementById('fbar');
+  const open = fbar.classList.toggle('show');
+  document.getElementById('filters-toggle').classList.toggle('active', open);
+});
+
+function updateFiltersCount() {
+  let n = 0;
+  if (document.getElementById('f-secteur').value.trim()) n++;
+  if (document.getElementById('f-lieu').value.trim()) n++;
+  Object.values(facets).forEach(v => { if (v) n++; });
+  if (dateState.pub.from || dateState.pub.to) n++;
+  if (dateState.close.from || dateState.close.to) n++;
+  const badge = document.getElementById('filters-count');
+  badge.textContent = n;
+  badge.style.display = n ? 'inline-block' : 'none';
+}
+
+// ─── Bulle "Sources des appels d'offres" (synchronisée avec la barre latérale) ──
+const srcBtn = document.getElementById('src-btn');
+const srcPanel = document.getElementById('src-panel');
+srcBtn.addEventListener('click', (e) => { e.stopPropagation(); srcPanel.classList.toggle('show'); });
+srcPanel.addEventListener('click', (e) => e.stopPropagation());
+
+function renderSourceFilter() {
+  const list = document.getElementById('src-list');
+  list.innerHTML = '';
+  sources.forEach(s => {
+    const opt = document.createElement('div');
+    opt.className = 'src-opt';
+    const on = selectedSources.has(s.id);
+    opt.innerHTML = `<div class="src-cb ${on ? 'checked' : ''}"></div><span class="src-flag">${s.country}</span><span>${s.name}</span>`;
+    opt.addEventListener('click', () => { toggleSource(s.id); });
+    list.appendChild(opt);
+  });
+  updateSourceBadge();
+}
+function updateSourceBadge() {
+  const badge = document.getElementById('src-badge');
+  const n = selectedSources.size, tot = sources.length;
+  const partial = n < tot;
+  srcBtn.classList.toggle('active', partial);
+  badge.textContent = `${n}/${tot}`;
+  badge.style.display = partial ? 'inline-block' : 'none';
+}
+document.getElementById('src-all').addEventListener('click', () => {
+  sources.forEach(s => selectedSources.add(s.id));
+  syncSourceUI();
+});
+document.getElementById('src-none').addEventListener('click', () => {
+  selectedSources.clear();
+  syncSourceUI();
+});
+// Reflète l'état des sources partout (barre latérale + bulle + bouton "tout").
+function syncSourceUI() {
+  sources.forEach(s => document.getElementById('cb-' + s.id)?.classList.toggle('checked', selectedSources.has(s.id)));
+  renderSourceFilter();
+  updateSelectAll();
+}
 
 // ─── Réinitialiser tous les critères ────────────────────────────────────────────
 document.getElementById('f-reset').addEventListener('click', () => {
