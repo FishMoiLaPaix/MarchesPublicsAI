@@ -662,6 +662,92 @@
   }
   .recent-cfg-model { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .recent-cfg-hint { font-size: 10px; color: var(--text3); flex-shrink: 0; }
+
+  /* ─── Save config row ─────────────────────────────────────── */
+  .save-cfg-row {
+    display: flex; align-items: center; gap: 6px;
+    margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border);
+  }
+  .save-cfg-name { flex: 1; font-size: 12px; padding: 5px 8px; }
+  .save-cfg-btn {
+    flex-shrink: 0; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 5px 9px; cursor: pointer;
+    font-size: 14px; line-height: 1; transition: border-color .15s, background .15s;
+  }
+  .save-cfg-btn:hover { border-color: var(--blue); background: var(--surface); }
+  .save-cfg-btn.saved { border-color: var(--green); color: var(--green); }
+
+  /* ─── Load more ───────────────────────────────────────────── */
+  .load-more-wrap {
+    display: flex; align-items: center; justify-content: center; gap: 12px;
+    padding: 24px 16px; margin-top: 8px;
+  }
+  .load-more-btn {
+    background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius);
+    color: var(--text); cursor: pointer; font-size: 13px; padding: 9px 20px;
+    transition: border-color .15s, background .15s;
+  }
+  .load-more-btn:hover { border-color: var(--blue); background: var(--surface); }
+  .load-more-btn:disabled { opacity: .5; cursor: default; }
+  .load-more-info { font-size: 12px; color: var(--text3); }
+
+  /* ─── Date filter dropdown ────────────────────────────────── */
+  .date-filter { position: relative; }
+  .date-filter-btn {
+    display: flex; align-items: center; gap: 6px;
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); color: var(--text2);
+    font-size: 12px; padding: 6px 11px; cursor: pointer;
+    transition: border-color .15s, color .15s;
+  }
+  .date-filter-btn:hover { border-color: var(--blue); color: var(--blue); }
+  .date-filter-btn.active { border-color: var(--blue); color: var(--blue); }
+  .date-filter-badge {
+    font-size: 10px; background: var(--blue); color: #fff;
+    border-radius: 8px; padding: 1px 6px; font-weight: 600;
+  }
+  .date-filter-panel {
+    display: none; position: absolute; top: calc(100% + 6px); left: 0;
+    z-index: 50; background: var(--surface); border: 1px solid var(--border2);
+    border-radius: var(--radius); padding: 14px; width: 240px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+  }
+  .date-filter-panel.show { display: block; }
+  .date-filter-panel .df-row { margin-bottom: 10px; }
+  .date-filter-panel label { font-size: 11px; color: var(--text3); display: block; margin-bottom: 4px; }
+  .date-filter-panel input[type=date] {
+    width: 100%; background: var(--bg3); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 6px 8px; color: var(--text);
+    font-size: 12px; outline: none; color-scheme: dark;
+  }
+  :root.light .date-filter-panel input[type=date] { color-scheme: light; }
+  .date-filter-panel input[type=date]:focus { border-color: var(--blue); }
+  .df-actions { display: flex; gap: 8px; justify-content: space-between; margin-top: 4px; }
+  .df-actions button {
+    flex: 1; padding: 6px; border-radius: var(--radius-sm); font-size: 12px; cursor: pointer;
+    border: 1px solid var(--border); background: var(--surface2); color: var(--text2);
+    transition: all .15s;
+  }
+  .df-clear:hover { border-color: var(--red); color: var(--red); }
+  .df-apply { background: var(--blue) !important; border-color: var(--blue) !important; color: #fff !important; }
+
+  /* ─── Pagination ──────────────────────────────────────────── */
+  .pagination {
+    display: none; align-items: center; justify-content: center; gap: 6px;
+    flex-wrap: wrap; padding: 22px 16px 8px; margin-top: 4px;
+  }
+  .pagination.show { display: flex; }
+  .page-btn {
+    min-width: 32px; height: 32px; padding: 0 8px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); color: var(--text2);
+    font-size: 12px; cursor: pointer; transition: all .15s;
+  }
+  .page-btn:hover:not(:disabled) { border-color: var(--blue); color: var(--blue); }
+  .page-btn.active { background: var(--blue); border-color: var(--blue); color: #fff; font-weight: 700; }
+  .page-btn:disabled { opacity: .4; cursor: default; }
+  .page-ellipsis { color: var(--text3); padding: 0 4px; }
+  .page-info { font-size: 12px; color: var(--text3); margin: 0 8px; }
 </style>
 </head>
 <body>
@@ -735,6 +821,12 @@
       </button>
       <div class="test-status" id="test-status"></div>
 
+      <!-- Sauvegarde manuelle config -->
+      <div class="save-cfg-row" id="save-cfg-row" style="display:none">
+        <input type="text" class="input-field save-cfg-name" id="cfg-save-name" placeholder="Nom (ex: Compte pro)" maxlength="30" />
+        <button class="save-cfg-btn" id="save-cfg-btn" title="Mémoriser cette configuration IA">💾</button>
+      </div>
+
       <!-- Configs IA récentes -->
       <div class="recent-cfg-section" id="recent-cfg-section" style="display:none">
         <div class="recent-cfg-label">Configs récentes</div>
@@ -773,6 +865,27 @@
           <div class="toggle on" id="ai-toggle-el"></div>
           <span class="toggle-label">Analyse IA</span>
         </label>
+
+        <div class="date-filter">
+          <button class="date-filter-btn" id="date-filter-btn">
+            📅 Période<span class="date-filter-badge" id="date-filter-badge" style="display:none"></span>
+          </button>
+          <div class="date-filter-panel" id="date-filter-panel">
+            <div class="df-row">
+              <label>Publié à partir du</label>
+              <input type="date" id="date-from" />
+            </div>
+            <div class="df-row">
+              <label>Jusqu'au</label>
+              <input type="date" id="date-to" />
+            </div>
+            <div class="df-actions">
+              <button class="df-clear" id="date-clear">Effacer</button>
+              <button class="df-apply" id="date-apply">Appliquer</button>
+            </div>
+          </div>
+        </div>
+
         <span class="result-count" id="result-count"></span>
       </div>
     </div>
@@ -806,6 +919,11 @@
       </div>
 
       <div class="results-grid" id="results-grid"></div>
+      <div class="pagination" id="pagination"></div>
+      <div class="load-more-wrap" id="load-more-wrap" style="display:none">
+        <button class="load-more-btn" id="load-more-btn">Charger plus de marchés depuis les sources</button>
+        <span class="load-more-info" id="load-more-info"></span>
+      </div>
     </div>
 
   </main>
@@ -831,6 +949,17 @@ let currentProvider = 'anthropic';
 let aiEnabled = true;
 let allResults = [];
 let aiAnalysis = null;
+let lastQuery = '';
+let lastSelected = [];
+let sourceOffsets = {};   // { sourceId: nextOffset }
+let sourceTotals = {};    // { sourceId: totalFromAPI }
+
+// Filtrage / pagination (affichage)
+const PAGE_SIZE = 15;
+let currentPage = 1;
+let dateFrom = null;       // 'YYYY-MM-DD' ou null
+let dateTo = null;         // 'YYYY-MM-DD' ou null
+let processedResults = []; // résultats filtrés + triés (cache du dernier rendu)
 
 // ─── Init ────────────────────────────────────────────────────────────────────
 async function init() {
@@ -855,6 +984,7 @@ async function init() {
   ]);
   renderRecentSearches(recentSearches || []);
   renderRecentConfigs(recentConfigs || []);
+  updateSaveCfgRow();
 }
 
 // ─── Config persist ───────────────────────────────────────────────────────────
@@ -917,12 +1047,14 @@ function renderRecentSearches(list) {
 }
 
 // ─── Recent AI configs ────────────────────────────────────────────────────────
-async function saveRecentConfig(cfg) {
+const PROVIDER_LABELS = { anthropic: 'Claude', openai: 'OpenAI', mistral: 'Mistral', ollama: 'Ollama', custom: 'Endpoint' };
+
+async function saveRecentConfig(cfg, name) {
   if (!cfg || (!cfg.apiKey && !cfg.endpoint)) return;
   let list = (await storeGet('recent-configs')) || [];
   const key = cfg.provider + '|' + cfg.model + '|' + (cfg.endpoint || '');
   list = list.filter(c => (c.provider + '|' + c.model + '|' + (c.endpoint || '')) !== key);
-  list.unshift({ provider: cfg.provider, apiKey: cfg.apiKey, endpoint: cfg.endpoint || '', model: cfg.model || '' });
+  list.unshift({ provider: cfg.provider, apiKey: cfg.apiKey, endpoint: cfg.endpoint || '', model: cfg.model || '', name: name || '' });
   if (list.length > 4) list = list.slice(0, 4);
   await storeSet('recent-configs', list);
   renderRecentConfigs(list);
@@ -937,21 +1069,25 @@ function renderRecentConfigs(list) {
   list.forEach((cfg) => {
     const item = document.createElement('div');
     item.className = 'recent-cfg-item';
+    const provLabel = PROVIDER_LABELS[cfg.provider] || cfg.provider;
+    const nameLabel = cfg.name || provLabel;
     const modelLabel = cfg.model || (cfg.endpoint ? cfg.endpoint.replace(/^https?:\/\//, '').slice(0, 20) : '—');
     const keyHint = cfg.apiKey ? cfg.apiKey.slice(0, 6) + '…' : '';
     item.innerHTML = `
-      <span class="recent-cfg-provider">${escHtml(cfg.provider)}</span>
-      <span class="recent-cfg-model">${escHtml(modelLabel)}</span>
+      <span class="recent-cfg-provider">${escHtml(provLabel)}</span>
+      <span class="recent-cfg-model">${escHtml(cfg.name ? cfg.name : modelLabel)}</span>
       ${keyHint ? `<span class="recent-cfg-hint">${escHtml(keyHint)}</span>` : ''}
     `;
-    item.title = `Restaurer : ${cfg.provider} / ${cfg.model || 'par défaut'}`;
+    item.title = `Restaurer : ${nameLabel} / ${cfg.model || 'par défaut'}`;
     item.addEventListener('click', () => {
       currentProvider = cfg.provider;
       document.getElementById('api-key').value = cfg.apiKey || '';
       document.getElementById('api-endpoint').value = cfg.endpoint || '';
       document.getElementById('api-model').value = cfg.model || '';
+      document.getElementById('cfg-save-name').value = cfg.name || '';
       updateProviderUI();
       saveConfig();
+      updateSaveCfgRow();
     });
     listEl.appendChild(item);
   });
@@ -997,11 +1133,28 @@ document.querySelectorAll('.provider-btn').forEach(btn => {
     currentProvider = btn.dataset.provider;
     updateProviderUI();
     saveConfig();
+    updateSaveCfgRow();
   });
 });
 
 ['api-key','api-endpoint','api-model'].forEach(id => {
-  document.getElementById(id).addEventListener('input', saveConfig);
+  document.getElementById(id).addEventListener('input', () => { saveConfig(); updateSaveCfgRow(); });
+});
+
+function updateSaveCfgRow() {
+  const cfg = getAIConfig();
+  const hasCredential = !!(cfg.apiKey || cfg.endpoint);
+  document.getElementById('save-cfg-row').style.display = hasCredential ? 'flex' : 'none';
+}
+
+document.getElementById('save-cfg-btn').addEventListener('click', async () => {
+  const cfg = getAIConfig();
+  const name = document.getElementById('cfg-save-name').value.trim();
+  await saveRecentConfig(cfg, name);
+  const btn = document.getElementById('save-cfg-btn');
+  btn.textContent = '✓';
+  btn.classList.add('saved');
+  setTimeout(() => { btn.textContent = '💾'; btn.classList.remove('saved'); }, 1500);
 });
 
 // ─── Test AI ─────────────────────────────────────────────────────────────────
@@ -1108,7 +1261,11 @@ document.getElementById('search-btn').addEventListener('click', async () => {
 
 async function runSearch(query, selected, aiConfig) {
   saveRecentSearch(query);
-  if (aiConfig.apiKey || aiConfig.endpoint) saveRecentConfig(aiConfig);
+  lastQuery = query;
+  lastSelected = selected;
+  sourceOffsets = {};
+  sourceTotals = {};
+  document.getElementById('load-more-wrap').style.display = 'none';
 
   // UI
   document.getElementById('welcome-state').style.display = 'none';
@@ -1138,6 +1295,7 @@ async function runSearch(query, selected, aiConfig) {
 
   // Search all sources in parallel
   allResults = [];
+  let totalAvailable = 0;
   const searches = selected.map(async (sourceId) => {
     const result = await window.api.searchSource({ sourceId, query });
     const s = sources.find(x => x.id === sourceId);
@@ -1153,7 +1311,11 @@ async function runSearch(query, selected, aiConfig) {
     } else {
       badge.className = 'source-badge done';
       const cnt = result.results.length;
-      const cntLabel = cnt >= 20 ? `${cnt}+` : cnt;
+      const tot = result.total || cnt;
+      totalAvailable += tot;
+      sourceOffsets[sourceId] = cnt;
+      sourceTotals[sourceId] = tot;
+      const cntLabel = tot > cnt ? `${cnt} / ${tot.toLocaleString('fr-FR')}` : String(cnt);
       badge.innerHTML = `<div class="dot"></div>${s?.name || sourceId} (${cntLabel})`;
       result.results.forEach(r => allResults.push({ ...r, sourceId, sourceName: s?.name || sourceId }));
     }
@@ -1162,33 +1324,319 @@ async function runSearch(query, selected, aiConfig) {
   await Promise.all(searches);
 
   // Update count
-  document.getElementById('result-count').textContent = `${allResults.length} résultat(s) trouvé(s)`;
-  document.getElementById('progress-title').textContent = `${allResults.length} marchés trouvés`;
+  const shown = allResults.length;
+  const countText = totalAvailable > shown
+    ? `${shown} affichés sur ${totalAvailable.toLocaleString('fr-FR')} disponibles`
+    : `${shown} résultat(s) trouvé(s)`;
+  document.getElementById('result-count').textContent = countText;
+  document.getElementById('progress-title').textContent = totalAvailable > shown
+    ? `${shown} / ${totalAvailable.toLocaleString('fr-FR')} marchés trouvés`
+    : `${shown} marchés trouvés`;
 
-  // AI Analysis
-  if (aiEnabled && allResults.length > 0) {
-    document.getElementById('progress-title').textContent = '🤖 Analyse IA en cours…';
-    document.getElementById('search-btn').classList.add('analyzing');
+  // 1) Affichage IMMÉDIAT, trié par correspondance avec les mots-clés saisis.
+  //    (l'analyse IA vient ensuite, en arrière-plan — plus besoin d'attendre)
+  aiAnalysis = null;
+  currentPage = 1;
+  refreshResults();
+  updateLoadMoreBtn();
 
-    const analysis = await window.api.analyzeWithAI({ aiConfig, query, results: allResults });
-    if (analysis.success) {
-      aiAnalysis = analysis.analysis;
-      renderAIPanel(aiAnalysis);
-    } else {
-      aiAnalysis = null;
-    }
-    document.getElementById('search-btn').classList.remove('analyzing');
-  } else {
-    aiAnalysis = null;
-  }
-
-  renderResults(allResults, aiAnalysis);
-
-  // Reset btn
   spinner.classList.remove('show');
   document.getElementById('search-btn-text').textContent = 'Rechercher';
   searchBtn.disabled = false;
   document.getElementById('progress-wrap').classList.remove('visible');
+
+  // 2) Analyse IA en arrière-plan : ré-affine et ré-affiche quand c'est prêt.
+  if (aiEnabled && allResults.length > 0) {
+    document.getElementById('search-btn').classList.add('analyzing');
+    document.getElementById('search-btn-text').textContent = 'Analyse IA…';
+    try {
+      const analysis = await window.api.analyzeWithAI({ aiConfig, query, results: allResults });
+      if (analysis.success) {
+        aiAnalysis = analysis.analysis;
+        renderAIPanel(aiAnalysis);
+        refreshResults();
+      }
+    } catch {}
+    document.getElementById('search-btn').classList.remove('analyzing');
+    document.getElementById('search-btn-text').textContent = 'Rechercher';
+  }
+}
+
+// ─── Load more ───────────────────────────────────────────────────────────────
+function updateLoadMoreBtn() {
+  const remaining = Object.entries(sourceTotals)
+    .reduce((acc, [id, tot]) => acc + Math.max(0, tot - (sourceOffsets[id] || 0)), 0);
+  const wrap = document.getElementById('load-more-wrap');
+  const info = document.getElementById('load-more-info');
+  if (remaining > 0) {
+    wrap.style.display = 'flex';
+    info.textContent = `${remaining.toLocaleString('fr-FR')} résultats supplémentaires disponibles`;
+  } else {
+    wrap.style.display = 'none';
+  }
+}
+
+async function loadMore() {
+  const btn = document.getElementById('load-more-btn');
+  btn.disabled = true;
+  btn.textContent = 'Chargement…';
+
+  const sourcesWithMore = Object.entries(sourceTotals)
+    .filter(([id, tot]) => tot > (sourceOffsets[id] || 0))
+    .map(([id]) => id);
+
+  const fetches = sourcesWithMore.map(async (sourceId) => {
+    const offset = sourceOffsets[sourceId] || 0;
+    const result = await window.api.searchSource({ sourceId, query: lastQuery, offset });
+    if (!result.error && result.results && result.results.length > 0) {
+      const s = sources.find(x => x.id === sourceId);
+      result.results.forEach(r => allResults.push({ ...r, sourceId, sourceName: s?.name || sourceId }));
+      sourceOffsets[sourceId] = offset + result.results.length;
+    }
+  });
+  await Promise.all(fetches);
+
+  refreshResults();
+  updateLoadMoreBtn();
+
+  btn.disabled = false;
+  btn.textContent = 'Charger plus de marchés depuis les sources';
+}
+
+document.getElementById('load-more-btn').addEventListener('click', loadMore);
+
+// ─── Filtre de dates (menu déroulant) ──────────────────────────────────────────
+const dfBtn = document.getElementById('date-filter-btn');
+const dfPanel = document.getElementById('date-filter-panel');
+const dfBadge = document.getElementById('date-filter-badge');
+
+dfBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  dfPanel.classList.toggle('show');
+});
+dfPanel.addEventListener('click', (e) => e.stopPropagation());
+document.addEventListener('click', () => dfPanel.classList.remove('show'));
+
+function fmtDateShort(iso) {
+  const [y, m, d] = iso.split('-');
+  return `${d}/${m}/${y.slice(2)}`;
+}
+
+function updateDateBadge() {
+  const active = !!(dateFrom || dateTo);
+  dfBtn.classList.toggle('active', active);
+  if (!active) { dfBadge.style.display = 'none'; return; }
+  let label = '';
+  if (dateFrom && dateTo)      label = `${fmtDateShort(dateFrom)} → ${fmtDateShort(dateTo)}`;
+  else if (dateFrom)           label = `dès ${fmtDateShort(dateFrom)}`;
+  else                         label = `jusqu'au ${fmtDateShort(dateTo)}`;
+  dfBadge.textContent = label;
+  dfBadge.style.display = 'inline-block';
+}
+
+document.getElementById('date-apply').addEventListener('click', () => {
+  const f = document.getElementById('date-from').value;
+  const t = document.getElementById('date-to').value;
+  // Tolérance : si l'utilisateur inverse les bornes, on les remet dans l'ordre.
+  if (f && t && f > t) { dateFrom = t; dateTo = f; }
+  else { dateFrom = f || null; dateTo = t || null; }
+  document.getElementById('date-from').value = dateFrom || '';
+  document.getElementById('date-to').value = dateTo || '';
+  currentPage = 1;
+  updateDateBadge();
+  dfPanel.classList.remove('show');
+  if (lastQuery) refreshResults();
+});
+
+document.getElementById('date-clear').addEventListener('click', () => {
+  dateFrom = dateTo = null;
+  document.getElementById('date-from').value = '';
+  document.getElementById('date-to').value = '';
+  currentPage = 1;
+  updateDateBadge();
+  dfPanel.classList.remove('show');
+  if (lastQuery) refreshResults();
+});
+
+// ─── Geographic post-filter ───────────────────────────────────────────────────
+const GEO_DEPARTMENTS = {
+  '75': 'Paris', '69': 'Lyon', '13': 'Marseille', '33': 'Bordeaux', '31': 'Toulouse',
+  '59': 'Lille', '06': 'Nice', '67': 'Strasbourg', '44': 'Nantes', '34': 'Montpellier',
+  '76': 'Rouen', '01': 'Ain', '02': 'Aisne', '03': 'Allier', '04': 'Alpes-Haute-Provence',
+  '05': 'Hautes-Alpes', '07': 'Ardèche', '08': 'Ardennes', '09': 'Ariège', '10': 'Aube',
+  '11': 'Aude', '12': 'Aveyron', '14': 'Calvados', '15': 'Cantal', '16': 'Charente',
+  '17': 'Charente-Maritime', '18': 'Cher', '19': 'Corrèze', '21': 'Côte-d\'Or',
+  '22': 'Côtes-d\'Armor', '23': 'Creuse', '24': 'Dordogne', '25': 'Doubs', '26': 'Drôme',
+  '27': 'Eure', '28': 'Eure-et-Loir', '29': 'Finistère', '30': 'Gard', '32': 'Gers',
+  '35': 'Ille-et-Vilaine', '36': 'Indre', '37': 'Indre-et-Loire', '38': 'Isère',
+  '39': 'Jura', '40': 'Landes', '41': 'Loir-et-Cher', '42': 'Loire', '43': 'Haute-Loire',
+  '45': 'Loiret', '46': 'Lot', '47': 'Lot-et-Garonne', '48': 'Lozère', '49': 'Maine-et-Loire',
+  '50': 'Manche', '51': 'Marne', '52': 'Haute-Marne', '53': 'Mayenne', '54': 'Meurthe-et-Moselle',
+  '55': 'Meuse', '56': 'Morbihan', '57': 'Moselle', '58': 'Nièvre', '60': 'Oise',
+  '61': 'Orne', '62': 'Pas-de-Calais', '63': 'Puy-de-Dôme', '64': 'Pyrénées-Atlantiques',
+  '65': 'Hautes-Pyrénées', '66': 'Pyrénées-Orientales', '68': 'Haut-Rhin', '70': 'Haute-Saône',
+  '71': 'Saône-et-Loire', '72': 'Sarthe', '73': 'Savoie', '74': 'Haute-Savoie',
+  '77': 'Seine-et-Marne', '78': 'Yvelines', '79': 'Deux-Sèvres', '80': 'Somme',
+  '81': 'Tarn', '82': 'Tarn-et-Garonne', '83': 'Var', '84': 'Vaucluse', '85': 'Vendée',
+  '86': 'Vienne', '87': 'Haute-Vienne', '88': 'Vosges', '89': 'Yonne', '90': 'Territoire-de-Belfort',
+  '91': 'Essonne', '92': 'Hauts-de-Seine', '93': 'Seine-Saint-Denis', '94': 'Val-de-Marne',
+  '95': 'Val-d\'Oise'
+};
+const GEO_REGIONS = ['Île-de-France','Auvergne-Rhône-Alpes','Bretagne','Normandie','Occitanie',
+  'Nouvelle-Aquitaine','Grand Est','Hauts-de-France','Pays de la Loire','Bourgogne-Franche-Comté',
+  'Centre-Val de Loire','Provence-Alpes-Côte d\'Azur','Corse'];
+
+function extractGeoTerms(text) {
+  const terms = [];
+  // Postal codes / dept numbers
+  const codeMatches = text.match(/\b(0[1-9]|[1-9][0-9]|[1-9][0-9]{3,4})\b/g) || [];
+  codeMatches.forEach(c => {
+    const dept = c.slice(0, 2);
+    if (GEO_DEPARTMENTS[dept]) terms.push(GEO_DEPARTMENTS[dept].toLowerCase());
+    if (c.length === 5) terms.push(c); // postal code itself
+  });
+  // City / region names
+  const allNames = [...Object.values(GEO_DEPARTMENTS), ...GEO_REGIONS,
+    'Paris','Lyon','Marseille','Bordeaux','Toulouse','Lille','Nice','Strasbourg','Nantes','Montpellier',
+    'Rennes','Reims','Rouen','Grenoble','Dijon','Angers','Nîmes','Clermont-Ferrand'];
+  allNames.forEach(name => {
+    if (text.toLowerCase().includes(name.toLowerCase())) terms.push(name.toLowerCase());
+  });
+  return [...new Set(terms)];
+}
+
+// ─── Normalisation & extraction des mots-clés de la requête ────────────────────
+function norm(s) {
+  return (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+const STOPWORDS = new Set(['de','du','des','la','le','les','un','une','et','ou','en','pour',
+  'dans','sur','au','aux','avec','sans','sous','par','the','of','and','marche','marches','public','publics']);
+function queryKeywords(query) {
+  return [...new Set(norm(query).split(/[^a-z0-9]+/).filter(w => w.length >= 3 && !STOPWORDS.has(w)))];
+}
+
+// ─── Score de correspondance mots-clés + géo (calcul local, sans IA) ───────────
+function computeClientScore(result, keywords, queryGeo) {
+  const text = norm((result.title || '') + ' ' + (result.desc || ''));
+  const matched = keywords.filter(k => text.includes(k));
+  let score = keywords.length ? Math.round((matched.length / keywords.length) * 100) : 50;
+  // Pénalité géographique : la requête cible une zone et l'annonce en cite une AUTRE.
+  if (queryGeo.length) {
+    const resultGeo = extractGeoTerms((result.title || '') + ' ' + (result.desc || ''));
+    if (resultGeo.length && !queryGeo.some(g => resultGeo.includes(g))) score = Math.min(score, 10);
+  }
+  return { score, matchedCount: matched.length };
+}
+
+// ─── Parsing de dates (formats hétérogènes selon les sources) ──────────────────
+const FR_MONTHS = { janvier:0, fevrier:1, mars:2, avril:3, mai:4, juin:5, juillet:6,
+  aout:7, septembre:8, octobre:9, novembre:10, decembre:11 };
+function parseResultDate(d) {
+  if (!d) return null;
+  const s = String(d).trim();
+  let m = s.match(/(\d{4})-(\d{2})-(\d{2})/);                  // ISO : 2024-11-05
+  if (m) return new Date(+m[1], +m[2] - 1, +m[3]);
+  m = s.match(/(\d{1,2})[\/.](\d{1,2})[\/.](\d{2,4})/);        // 05/11/2024 ou 5.11.24
+  if (m) { let y = +m[3]; if (y < 100) y += 2000; return new Date(y, +m[2] - 1, +m[1]); }
+  m = norm(s).match(/(\d{1,2})\s+([a-z]+)\s+(\d{4})/);         // 5 novembre 2024
+  if (m && FR_MONTHS[m[2]] != null) return new Date(+m[3], FR_MONTHS[m[2]], +m[1]);
+  return null;
+}
+function inDateRange(result) {
+  if (!dateFrom && !dateTo) return true;
+  const d = parseResultDate(result.date);
+  if (!d) return true; // date illisible → on ne masque pas (éviter de perdre des résultats valides)
+  if (dateFrom && d < new Date(dateFrom + 'T00:00:00')) return false;
+  if (dateTo && d > new Date(dateTo + 'T23:59:59')) return false;
+  return true;
+}
+
+// ─── Pipeline : filtrage (mots-clés + dates) puis tri par pertinence ───────────
+function getProcessedResults() {
+  const keywords = queryKeywords(lastQuery);
+  const queryGeo = extractGeoTerms(lastQuery);
+
+  const relMap = {};
+  if (aiAnalysis?.relevant) aiAnalysis.relevant.forEach(r => { relMap[r.index] = r; });
+
+  let list = allResults.map((r, i) => {
+    const ai = relMap[i] || null;
+    const client = computeClientScore(r, keywords, queryGeo);
+    return { ...r, _idx: i, _rel: ai, _clientScore: client.score,
+             _matched: client.matchedCount, _score: ai ? ai.score : client.score };
+  });
+
+  // Filtre de période
+  list = list.filter(inDateRange);
+
+  // Filtre de pertinence : on masque ce qui ne contient AUCUN mot-clé saisi
+  // et que l'IA n'a pas jugé pertinent. Garde-fou : ne jamais tout masquer.
+  if (keywords.length) {
+    const relevant = list.filter(r => r._matched > 0 || (r._rel && r._rel.score >= 40));
+    if (relevant.length > 0) list = relevant;
+  }
+
+  list.sort((a, b) => (b._score - a._score) || (b._matched - a._matched));
+  return list;
+}
+
+// ─── Rafraîchit l'affichage à partir de l'état courant ─────────────────────────
+function refreshResults() {
+  processedResults = getProcessedResults();
+  const totalPages = Math.max(1, Math.ceil(processedResults.length / PAGE_SIZE));
+  if (currentPage > totalPages) currentPage = totalPages;
+  renderResults();
+  renderPagination();
+  updateResultCount();
+}
+
+function updateResultCount() {
+  const shown = processedResults.length;
+  const fetched = allResults.length;
+  let txt = `${shown} résultat(s) pertinent(s)`;
+  if (fetched > shown) txt += ` · ${fetched} récupéré(s)`;
+  document.getElementById('result-count').textContent = txt;
+}
+
+function goToPage(p) {
+  currentPage = p;
+  renderResults();
+  renderPagination();
+  document.getElementById('results-area').scrollTop = 0;
+}
+
+function renderPagination() {
+  const pager = document.getElementById('pagination');
+  const totalPages = Math.ceil(processedResults.length / PAGE_SIZE);
+  pager.innerHTML = '';
+  if (totalPages <= 1) { pager.classList.remove('show'); return; }
+  pager.classList.add('show');
+
+  const mk = (label, page, opts = {}) => {
+    const b = document.createElement('button');
+    b.className = 'page-btn' + (opts.active ? ' active' : '');
+    b.textContent = label;
+    if (opts.disabled) b.disabled = true;
+    else b.addEventListener('click', () => goToPage(page));
+    return b;
+  };
+  const ell = () => { const s = document.createElement('span'); s.className = 'page-ellipsis'; s.textContent = '…'; return s; };
+
+  pager.appendChild(mk('‹', currentPage - 1, { disabled: currentPage === 1 }));
+  const wanted = new Set([1, totalPages, currentPage, currentPage - 1, currentPage + 1]);
+  const visible = [...wanted].filter(p => p >= 1 && p <= totalPages).sort((a, b) => a - b);
+  let prev = 0;
+  visible.forEach(p => {
+    if (p - prev > 1) pager.appendChild(ell());
+    pager.appendChild(mk(String(p), p, { active: p === currentPage }));
+    prev = p;
+  });
+  pager.appendChild(mk('›', currentPage + 1, { disabled: currentPage === totalPages }));
+
+  const info = document.createElement('span');
+  info.className = 'page-info';
+  info.textContent = `Page ${currentPage} / ${totalPages}`;
+  pager.appendChild(info);
 }
 
 // ─── Render AI panel ─────────────────────────────────────────────────────────
@@ -1199,83 +1647,26 @@ function renderAIPanel(analysis) {
   document.getElementById('ai-panel').classList.add('visible');
 }
 
-// ─── Render results ───────────────────────────────────────────────────────────
-function renderResults(results, analysis) {
+// ─── Render results (page courante) ────────────────────────────────────────────
+function renderResults() {
   const grid = document.getElementById('results-grid');
   grid.innerHTML = '';
 
-  if (results.length === 0) {
-    grid.innerHTML = '<div class="no-results">Aucun résultat trouvé. Essayez des termes différents ou sélectionnez plus de sources.</div>';
+  if (processedResults.length === 0) {
+    grid.innerHTML = '<div class="no-results">Aucun résultat ne correspond. Essayez d\'autres mots-clés, élargissez la période, ou sélectionnez plus de sources.</div>';
     return;
   }
 
-  // Build relevance map from AI
-  const relevanceMap = {};
-  if (analysis?.relevant) {
-    analysis.relevant.forEach(r => { relevanceMap[r.index] = r; });
-  }
-
-  // Sort: relevant first if AI
-  let sorted = results.map((r, i) => ({ ...r, _idx: i, _rel: relevanceMap[i] }));
-  if (analysis?.relevant) {
-    sorted.sort((a, b) => {
-      const sa = a._rel?.score || 0;
-      const sb = b._rel?.score || 0;
-      return sb - sa;
-    });
-  }
-
-  // Group by source
-  const bySource = {};
-  sorted.forEach(r => {
-    if (!bySource[r.sourceName]) bySource[r.sourceName] = [];
-    bySource[r.sourceName].push(r);
-  });
-
-  // If AI: show "Recommandés" group first
-  if (analysis?.relevant && analysis.relevant.length > 0) {
-    const recommended = sorted.filter(r => r._rel?.score >= 60);
-    const excluded    = sorted.filter(r => r._rel && r._rel.score > 0 && r._rel.score < 60);
-    const offTopic    = sorted.filter(r => r._rel && r._rel.score === 0);
-    const unscored    = sorted.filter(r => !r._rel);
-
-    if (recommended.length > 0) {
-      addGroupHeader(grid, '⭐ Recommandés par l\'IA', recommended.length);
-      recommended.forEach(r => grid.appendChild(makeCard(r, true)));
-    }
-    if (excluded.length > 0) {
-      addGroupHeader(grid, 'Partiellement pertinents', excluded.length);
-      excluded.forEach(r => grid.appendChild(makeCard(r, false)));
-    }
-    if (offTopic.length > 0) {
-      addGroupHeader(grid, 'Hors critères (mauvaise zone, hors-sujet)', offTopic.length);
-      offTopic.forEach(r => grid.appendChild(makeCard(r, false)));
-    }
-    if (unscored.length > 0) {
-      addGroupHeader(grid, 'Non analysés', unscored.length);
-      unscored.forEach(r => grid.appendChild(makeCard(r, false)));
-    }
-  } else {
-    // Group by source
-    Object.entries(bySource).forEach(([sourceName, items]) => {
-      addGroupHeader(grid, sourceName, items.length);
-      items.forEach(r => grid.appendChild(makeCard(r, false)));
-    });
-  }
-}
-
-function addGroupHeader(grid, title, count) {
-  const h = document.createElement('div');
-  h.className = 'group-header';
-  h.innerHTML = `<div class="group-title">${title}</div><div class="group-line"></div><div class="group-count">${count}</div>`;
-  grid.appendChild(h);
+  const start = (currentPage - 1) * PAGE_SIZE;
+  const pageItems = processedResults.slice(start, start + PAGE_SIZE);
+  pageItems.forEach(r => grid.appendChild(makeCard(r, (r._rel?.score ?? r._score) >= 60)));
 }
 
 function makeCard(result, highlighted) {
   const card = document.createElement('div');
   card.className = 'result-card' + (highlighted ? ' highlighted' : '');
 
-  const score = result._rel?.score;
+  const score = result._rel?.score ?? result._score;
   const scoreColor = score >= 80 ? '#00e676' : score >= 60 ? '#4a9eff' : '#ff9800';
 
   card.innerHTML = `

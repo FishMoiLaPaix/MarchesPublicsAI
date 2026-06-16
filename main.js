@@ -79,19 +79,19 @@ const SOURCES = [
     country: '🇫🇷',
     description: 'Bulletin Officiel des Annonces de Marchés Publics',
     url: 'https://www.boamp.fr',
-    search: async (query) => {
+    search: async (query, offset = 0) => {
       const encoded = encodeURIComponent(query);
-      // API OpenDataSoft officielle BOAMP — fiable et sans scraping
-      const url = `https://boamp-datadila.opendatasoft.com/api/explore/v2.1/catalog/datasets/boamp/records?q=${encoded}&limit=50&order_by=dateparution%20desc`;
+      const url = `https://boamp-datadila.opendatasoft.com/api/explore/v2.1/catalog/datasets/boamp/records?q=${encoded}&limit=50&offset=${offset}&order_by=dateparution%20desc`;
       const data = await fetchJson(url);
-      return (data.results || [])
+      const items = (data.results || [])
         .map(r => ({
           title: r.objet || 'Avis BOAMP',
           desc: r.nomacheteur ? `${r.nomacheteur}${r.famille_libelle ? ' — ' + r.famille_libelle : ''}` : (r.famille_libelle || ''),
           date: (r.dateparution || '').slice(0, 10),
-          url: r.url_avis || (r.idweb ? `https://www.boamp.fr/pages/avis/?q=idweb:${r.idweb}` : 'https://www.boamp.fr')
+          url: r.idweb ? `https://www.boamp.fr/avis/detail/${r.idweb}` : 'https://www.boamp.fr'
         }))
         .filter(r => r.title);
+      return { results: items, total: data.total_count || items.length };
     }
   },
   {
@@ -102,20 +102,27 @@ const SOURCES = [
     url: 'https://www.marches-publics.gouv.fr',
     search: async (query) => {
       const encoded = encodeURIComponent(query);
-      const url = `https://www.marches-publics.gouv.fr/?page=entreprise.EntrepriseAdvancedSearch&AllCons&id_lot=0&y=0&texte=${encoded}`;
+      const url = `https://www.marches-publics.gouv.fr/index.php?page=entreprise.EntrepriseAdvancedSearch&AllCons&texte=${encoded}`;
       const html = await fetchHtml(url);
       const cheerio = require('cheerio');
       const $ = cheerio.load(html);
       const results = [];
-      $('tr.tableRegular, .dce-item, .result-row, li.resultat, .avis-item').each((i, el) => {
+      $('.item_consultation').each((i, el) => {
         if (i >= 20) return false;
-        const title = $(el).find('td:nth-child(2), .objet, h3, .libelle, a').first().text().trim();
-        const date = $(el).find('td:nth-child(4), .date, time').first().text().trim();
-        const href = $(el).find('a').first().attr('href');
-        if (title && title.length > 5) results.push({
-          title, desc: '', date,
-          url: href ? (href.startsWith('http') ? href : 'https://www.marches-publics.gouv.fr' + href) : url
-        });
+        const titleEl = $(el).find('[id*="panelBlocObjet"] .truncate-700');
+        const title = titleEl.attr('title') || titleEl.find('span').not('.h5, strong').last().text().trim();
+        const descEl = $(el).find('[id*="panelBlocDenomination"] .truncate-700');
+        const desc = descEl.attr('title') || descEl.find('.small').text().trim();
+        const day   = $(el).find('.date-min .day span').text().trim();
+        const month = $(el).find('.date-min .month span').text().trim();
+        const year  = $(el).find('.date-min .year span').text().trim();
+        const date  = day && year ? `${day} ${month} ${year}` : '';
+        const refCons = $(el).find('input[name*="refCons"]').val();
+        const orgCons = $(el).find('input[name*="orgCons"]').val();
+        const link = refCons && orgCons
+          ? `https://www.marches-publics.gouv.fr/entreprise/consultation/${refCons}?orgAcronyme=${orgCons}`
+          : 'https://www.marches-publics.gouv.fr';
+        if (title && title.length > 5) results.push({ title, desc, date, url: link });
       });
       return results;
     }
@@ -126,8 +133,7 @@ const SOURCES = [
     country: '🇪🇺',
     description: 'Tenders Electronic Daily — Marchés européens',
     url: 'https://ted.europa.eu',
-    search: async (query) => {
-      // Les champs TED sont des tableaux d'objets {lang: "valeur"} — helper pour les extraire
+    search: async (query, offset = 0) => {
       const getStr = (f) => {
         if (!f) return '';
         if (typeof f === 'string') return f;
@@ -136,15 +142,16 @@ const SOURCES = [
         return String(f);
       };
       const q = encodeURIComponent(query);
-      const apiUrl = `https://ted.europa.eu/api/v2.0/notices/search?fields=ND,TI,PD,MA&q=${q}&scope=3&limit=20&sortField=ND&sortOrder=DESC`;
+      const apiUrl = `https://ted.europa.eu/api/v2.0/notices/search?fields=ND,TI,PD,MA,XY&q=${q}&scope=3&limit=25&offset=${offset}&sortField=ND&sortOrder=DESC`;
       const data = await fetchJson(apiUrl);
       const notices = data.results || data.notices || [];
-      return notices.map(n => ({
-        title: getStr(n.TI) || 'Avis TED',
-        desc: getStr(n.MA) || '',
+      const items = notices.map(n => ({
+        title: getStr(n.TI) || getStr(n.ND) || 'Avis TED Europa',
+        desc: getStr(n.MA) || getStr(n.XY) || '',
         date: getStr(n.PD).slice(0, 10),
         url: getStr(n.ND) ? `https://ted.europa.eu/en/notice/-/detail/${getStr(n.ND)}` : 'https://ted.europa.eu'
-      })).filter(r => r.title && r.title !== 'Avis TED');
+      })).filter(r => r.title);
+      return { results: items, total: data.totalNoticeCount || items.length };
     }
   },
   {
@@ -173,7 +180,7 @@ const SOURCES = [
         const refCons = $(el).find('input[name*="refCons"]').val();
         const orgCons = $(el).find('input[name*="orgCons"]').val();
         const link = refCons && orgCons
-          ? `https://www.demat-ampa.fr/?page=Entreprise.EntrepriseConsultation&refConsultation=${refCons}&orgAcronyme=${orgCons}`
+          ? `https://www.demat-ampa.fr/entreprise/consultation/${refCons}?orgAcronyme=${orgCons}`
           : 'https://www.demat-ampa.fr';
         if (title && title.length > 5) results.push({ title, desc, date, url: link });
       });
@@ -206,7 +213,7 @@ const SOURCES = [
         const refCons = $(el).find('input[name*="refCons"]').val();
         const orgCons = $(el).find('input[name*="orgCons"]').val();
         const link = refCons && orgCons
-          ? `https://www.marches-securises.fr/?page=Entreprise.EntrepriseConsultation&refConsultation=${refCons}&orgAcronyme=${orgCons}`
+          ? `https://www.marches-securises.fr/entreprise/consultation/${refCons}?orgAcronyme=${orgCons}`
           : 'https://www.marches-securises.fr';
         if (title && title.length > 5) results.push({ title, desc, date, url: link });
       });
@@ -338,18 +345,19 @@ const SOURCES = [
     country: '🇫🇷',
     description: 'Avis d\'attribution BOAMP (contrats récemment attribués)',
     url: 'https://www.boamp.fr',
-    search: async (query) => {
+    search: async (query, offset = 0) => {
       const encoded = encodeURIComponent(query);
-      const url = `https://boamp-datadila.opendatasoft.com/api/explore/v2.1/catalog/datasets/boamp/records?q=${encoded}&where=nature%3D%22ATTRIBUTION%22&limit=50&order_by=dateparution%20desc`;
+      const url = `https://boamp-datadila.opendatasoft.com/api/explore/v2.1/catalog/datasets/boamp/records?q=${encoded}&where=nature%3D%22ATTRIBUTION%22&limit=50&offset=${offset}&order_by=dateparution%20desc`;
       const data = await fetchJson(url);
-      return (data.results || [])
+      const items = (data.results || [])
         .map(r => ({
           title: r.objet || 'Attribution BOAMP',
           desc: r.titulaire ? `Titulaire : ${r.titulaire}${r.nomacheteur ? ' — ' + r.nomacheteur : ''}` : (r.nomacheteur || ''),
           date: (r.dateparution || '').slice(0, 10),
-          url: r.url_avis || (r.idweb ? `https://www.boamp.fr/pages/avis/?q=idweb:${r.idweb}` : 'https://www.boamp.fr')
+          url: r.idweb ? `https://www.boamp.fr/avis/detail/${r.idweb}` : 'https://www.boamp.fr'
         }))
         .filter(r => r.title);
+      return { results: items, total: data.total_count || items.length };
     }
   }
 ];
@@ -478,14 +486,16 @@ async function callAI(config, systemPrompt, userPrompt) {
 // ─── IPC handlers ────────────────────────────────────────────────────────────
 ipcMain.handle('get-sources', () => SOURCES.map(s => ({ id: s.id, name: s.name, country: s.country, description: s.description, url: s.url })));
 
-ipcMain.handle('search-source', async (_, { sourceId, query }) => {
+ipcMain.handle('search-source', async (_, { sourceId, query, offset = 0 }) => {
   const source = SOURCES.find(s => s.id === sourceId);
-  if (!source) return { sourceId, results: [], error: 'Source inconnue' };
+  if (!source) return { sourceId, results: [], total: 0, error: 'Source inconnue' };
   try {
-    const results = await source.search(query);
-    return { sourceId, results };
+    const raw = await source.search(query, offset);
+    const results = Array.isArray(raw) ? raw : (raw.results || []);
+    const total = Array.isArray(raw) ? raw.length : (raw.total || results.length);
+    return { sourceId, results, total };
   } catch (e) {
-    return { sourceId, results: [], error: e.message };
+    return { sourceId, results: [], total: 0, error: e.message };
   }
 });
 
