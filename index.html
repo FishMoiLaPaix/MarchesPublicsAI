@@ -750,6 +750,10 @@
   .f-select:focus { border-color: var(--blue); }
   .f-select.active { border-color: var(--blue); color: var(--blue); }
   .f-select option { background: var(--surface); color: var(--text); }
+  .kw-mode {
+    padding: 12px 14px; font-size: 13px; max-width: 240px; flex-shrink: 0;
+    border-width: 1.5px; border-radius: var(--radius);
+  }
   .f-reset {
     background: transparent; border: 1px solid var(--border);
     border-radius: var(--radius-sm); color: var(--text3);
@@ -931,6 +935,19 @@
         </button>
       </div>
 
+      <!-- Mots-clés multiples (séparés par ;) + mode de pertinence -->
+      <div class="search-row" style="margin-top:8px">
+        <div class="search-input-wrap">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
+          <input type="text" class="search-input" id="f-keywords" placeholder="Mots-clés séparés par des ;" />
+        </div>
+        <select class="f-select kw-mode" id="f-strict" title="Niveau de correspondance des mots-clés">
+          <option value="souple">Souple (max de mots-clés)</option>
+          <option value="strict">Strict (tous les mots-clés)</option>
+          <option value="ou">Large (au moins 1)</option>
+        </select>
+      </div>
+
       <!-- Barre de critères (facettes) -->
       <div class="fbar" id="fbar">
         <input type="text" class="f-text" id="f-secteur" placeholder="🔎 Secteur d'activité" />
@@ -1088,6 +1105,8 @@ let lastQuery = '';
 let lastSelected = [];
 let lastKeywords = [];
 let lastDepts = [];
+let lastGroups = [];          // groupes de mots-clés (tableaux de mots) pour le scoring client
+let keywordMode = 'souple';   // 'strict' | 'souple' | 'ou'
 let sourceOffsets = {};   // { sourceId: nextOffset }
 let sourceTotals = {};    // { sourceId: totalFromAPI }
 
@@ -1395,29 +1414,57 @@ document.getElementById('ai-toggle').addEventListener('click', () => {
 });
 
 // ─── Search ───────────────────────────────────────────────────────────────────
-['search-input', 'f-secteur', 'f-lieu'].forEach(id => {
+['search-input', 'f-keywords', 'f-secteur', 'f-lieu'].forEach(id => {
   document.getElementById(id).addEventListener('keydown', (e) => {
     if (e.key === 'Enter') triggerSearch();
   });
 });
 document.getElementById('search-btn').addEventListener('click', triggerSearch);
 
+// Mode de pertinence des mots-clés (strict / souple / ou).
+document.getElementById('f-strict').addEventListener('change', (e) => {
+  keywordMode = e.target.value;
+  e.target.classList.toggle('active', keywordMode !== 'souple');
+  currentPage = 1;
+  if (lastFilters) triggerSearch();
+});
+
 // Rassemble tous les critères de l'interface en un objet de filtres.
 function gatherFilters() {
   const precise = document.getElementById('search-input').value.trim();
+  const kwBar   = document.getElementById('f-keywords').value.trim();
   const secteur = document.getElementById('f-secteur').value.trim();
   const lieu    = document.getElementById('f-lieu').value.trim();
-  const text = [precise, secteur].filter(Boolean).join(' ');
 
-  const kwScan = geoScan(text, true);
-  const keywords = queryKeywords(text, kwScan.words);
-  const depts = [...new Set([...geoScan(lieu, true).zones, ...kwScan.zones])];
-  // Texte transmis aux sources NON-BOAMP (PLACE, Demat-AMPA, etc.) : on inclut le
-  // lieu pour que leur propre moteur de recherche filtre aussi par localisation.
-  const scraperText = [precise, secteur, lieu].filter(Boolean).join(' ');
+  // Sources de mots-clés : la barre ;-séparée, le secteur, et la recherche précise.
+  const rawGroups = [];
+  kwBar.split(';').forEach(s => { if (s.trim()) rawGroups.push(s.trim()); });
+  if (secteur) rawGroups.push(secteur);
+  if (precise) rawGroups.push(precise);
+
+  // Zones (départements) détectées dans les mots-clés + le champ Lieu.
+  const geoWords = geoScan(rawGroups.join(' '), true).words;
+  const depts = [...new Set([...geoScan(lieu, true).zones, ...geoScan(rawGroups.join(' '), true).zones])];
+
+  // Chaque groupe = liste de mots (hors géo / stopwords). On déduplique les groupes.
+  const seen = new Set();
+  const groups = [];
+  rawGroups.forEach(g => {
+    const words = normWords(g).filter(w => w.length >= 2 && !STOPWORDS.has(w) && !geoWords.has(w));
+    if (!words.length) return;
+    const key = words.join(' ');
+    if (seen.has(key)) return;
+    seen.add(key);
+    groups.push(words);
+  });
+  const keywordGroups = groups.map(w => w.join(' ')); // pour BOAMP (objet like)
+
+  // Texte transmis aux sources NON-BOAMP : tous les mots-clés + le lieu.
+  const scraperText = [...rawGroups, lieu].filter(Boolean).join(' ');
 
   return {
-    text, scraperText, precise, secteur, lieu, keywords, depts,
+    text: rawGroups.join(' '), scraperText, precise, secteur, lieu,
+    groups, keywordGroups, keywordMode, depts,
     typeMarche: facets.typeMarche, famille: facets.famille, procedure: facets.procedure,
     nature: facets.nature, etat: facets.etat,
     pubFrom: dateState.pub.from, pubTo: dateState.pub.to,
@@ -1426,7 +1473,7 @@ function gatherFilters() {
 }
 
 function hasAnyCriterion(f) {
-  return !!(f.keywords.length || f.depts.length || f.typeMarche || f.famille || f.procedure ||
+  return !!(f.groups.length || f.depts.length || f.typeMarche || f.famille || f.procedure ||
             f.nature || f.etat || f.pubFrom || f.pubTo || f.closeFrom || f.closeTo);
 }
 
@@ -1462,6 +1509,8 @@ async function triggerSearch() {
 function saveFilterState() {
   storeSet('last-filters', {
     precise: document.getElementById('search-input').value,
+    keywords: document.getElementById('f-keywords').value,
+    mode: keywordMode,
     secteur: document.getElementById('f-secteur').value,
     lieu: document.getElementById('f-lieu').value,
     facets: { ...facets },
@@ -1475,6 +1524,11 @@ async function restoreFilterState() {
   const st = await storeGet('last-filters');
   if (!st) return;
   document.getElementById('search-input').value = st.precise || '';
+  document.getElementById('f-keywords').value = st.keywords || '';
+  keywordMode = st.mode || 'souple';
+  const strictEl = document.getElementById('f-strict');
+  strictEl.value = keywordMode;
+  strictEl.classList.toggle('active', keywordMode !== 'souple');
   document.getElementById('f-secteur').value = st.secteur || '';
   document.getElementById('f-lieu').value = st.lieu || '';
 
@@ -1521,7 +1575,7 @@ async function runSearch(filters, selected, aiConfig) {
   lastFilters = filters;
   lastQuery = filters.text;
   lastSelected = selected;
-  lastKeywords = filters.keywords;
+  lastGroups = filters.groups;
   lastDepts = filters.depts;
   sourceOffsets = {};
   sourceTotals = {};
@@ -1558,7 +1612,7 @@ async function runSearch(filters, selected, aiConfig) {
   let totalAvailable = 0;
   const fp = facetPayload(filters);
   const searches = selected.map(async (sourceId) => {
-    const result = await window.api.searchSource({ sourceId, query: filters.scraperText, keywords: filters.keywords, depts: filters.depts, facets: fp });
+    const result = await window.api.searchSource({ sourceId, query: filters.scraperText, depts: filters.depts, facets: fp, keywordGroups: filters.keywordGroups, keywordMode: filters.keywordMode });
     const s = sources.find(x => x.id === sourceId);
     const badge = badges[sourceId];
 
@@ -1648,7 +1702,7 @@ async function loadMore() {
 
   const fetches = sourcesWithMore.map(async (sourceId) => {
     const offset = sourceOffsets[sourceId] || 0;
-    const result = await window.api.searchSource({ sourceId, query: lastFilters ? lastFilters.scraperText : lastQuery, offset, keywords: lastKeywords, depts: lastDepts, facets: lastFilters ? facetPayload(lastFilters) : {} });
+    const result = await window.api.searchSource({ sourceId, query: lastFilters ? lastFilters.scraperText : lastQuery, offset, depts: lastDepts, facets: lastFilters ? facetPayload(lastFilters) : {}, keywordGroups: lastFilters ? lastFilters.keywordGroups : [], keywordMode });
     if (!result.error && result.results && result.results.length > 0) {
       const s = sources.find(x => x.id === sourceId);
       result.results.forEach(r => allResults.push({ ...r, sourceId, sourceName: s?.name || sourceId }));
@@ -1679,7 +1733,7 @@ Object.entries(FACET_SELECTS).forEach(([id, key]) => {
     if (lastFilters) triggerSearch(); // re-fetch (filtre serveur BOAMP)
   });
 });
-['f-secteur', 'f-lieu'].forEach(id => document.getElementById(id).addEventListener('input', updateFiltersCount));
+['f-keywords', 'f-secteur', 'f-lieu'].forEach(id => document.getElementById(id).addEventListener('input', updateFiltersCount));
 
 // ─── Bulles de dates (publication + clôture) ────────────────────────────────────
 function fmtDateShort(iso) { const [y, m, d] = iso.split('-'); return `${d}/${m}/${y.slice(2)}`; }
@@ -1744,6 +1798,8 @@ function updateFiltersCount() {
   badge.style.display = n ? 'inline-block' : 'none';
 }
 
+// Compte mots-clés/mode séparément (la barre mots-clés est hors panneau Filtres).
+
 // ─── Bulle "Sources des appels d'offres" (synchronisée avec la barre latérale) ──
 const srcBtn = document.getElementById('src-btn');
 const srcPanel = document.getElementById('src-panel');
@@ -1789,6 +1845,10 @@ function syncSourceUI() {
 // ─── Réinitialiser tous les critères ────────────────────────────────────────────
 document.getElementById('f-reset').addEventListener('click', () => {
   document.getElementById('search-input').value = '';
+  document.getElementById('f-keywords').value = '';
+  keywordMode = 'souple';
+  const strictEl = document.getElementById('f-strict');
+  strictEl.value = 'souple'; strictEl.classList.remove('active');
   document.getElementById('f-secteur').value = '';
   document.getElementById('f-lieu').value = '';
   Object.keys(facets).forEach(k => facets[k] = '');
@@ -1871,32 +1931,35 @@ function stemWord(w) {
   return w.replace(/(ations|ation|ements|ement|ions|aires|aire|euses|euse|eurs|eur|ives|ive|ifs|if|aux|ales|ale|s|x|e)$/, '');
 }
 
-// ─── Score de correspondance mots-clés + géo (calcul local, sans IA) ───────────
-function computeClientScore(result, keywords, queryZones) {
+// ─── Score de correspondance par GROUPES de mots-clés + géo (calcul local) ──────
+// Un groupe (ex: "équipement sportif") est "matché" si TOUS ses mots sont présents.
+function computeClientScore(result, groups, queryZones) {
   const titleN = norm(result.title);
   const text = titleN + ' ' + norm(result.desc);
   const textStems = new Set(text.split(/[^a-z0-9]+/).filter(Boolean).map(stemWord));
   const titleStems = new Set(titleN.split(/[^a-z0-9]+/).filter(Boolean).map(stemWord));
+  const wordMatch = (w) => {
+    const ws = stemWord(w);
+    return text.includes(w) || textStems.has(w) || textStems.has(ws);
+  };
 
-  let matchedCount = 0, titleMatches = 0;
-  keywords.forEach(k => {
-    const ks = stemWord(k);
-    if (text.includes(k) || textStems.has(k) || textStems.has(ks)) {
-      matchedCount++;
-      if (titleN.includes(k) || titleStems.has(ks)) titleMatches++;
+  let matchedGroups = 0, titleHits = 0;
+  groups.forEach(words => {
+    if (words.every(wordMatch)) {
+      matchedGroups++;
+      if (words.some(w => titleN.includes(w) || titleStems.has(stemWord(w)))) titleHits++;
     }
   });
 
-  // Score non linéaire : on récompense la couverture COMPLÈTE des mots-clés et on
-  // pénalise les correspondances partielles (1 mot sur 2 → ~38 %, pas 50 %).
+  // Score non linéaire : récompense la couverture COMPLÈTE des groupes et
+  // pénalise les correspondances partielles (1 groupe sur 2 → ~38 %, pas 50 %).
   let score;
-  if (!keywords.length) {
+  if (!groups.length) {
     score = 60;
   } else {
-    const cov = matchedCount / keywords.length;
+    const cov = matchedGroups / groups.length;
     score = Math.round(Math.pow(cov, 1.4) * 100);
-    if (text.includes(keywords.join(' '))) score = 100;          // phrase exacte présente
-    if (titleMatches > 0 && score < 100) score = Math.min(100, score + 8); // bonus si dans le titre
+    if (titleHits > 0 && score < 100) score = Math.min(100, score + 8); // bonus si dans le titre
   }
 
   // Pénalité géographique : la requête cible une zone, l'annonce en cite une AUTRE.
@@ -1909,7 +1972,7 @@ function computeClientScore(result, keywords, queryZones) {
       score = Math.min(score, 8);
     }
   }
-  return { score, matchedCount, geoMismatch };
+  return { score, matchedGroups, geoMismatch };
 }
 
 // ─── Parsing de dates (formats hétérogènes selon les sources) ──────────────────
@@ -1948,15 +2011,16 @@ function passEtat(result) {
 // ─── Pipeline : filtrage (mots-clés + zone + dates + état) puis tri par pertinence ─
 function getProcessedResults() {
   const queryZones = new Set(lastDepts);
-  const keywords = lastKeywords;
+  const groups = lastGroups;
+  const nGroups = groups.length;
 
   const relMap = {};
   if (aiAnalysis?.relevant) aiAnalysis.relevant.forEach(r => { relMap[r.index] = r; });
 
   let list = allResults.map((r, i) => {
     const ai = relMap[i] || null;
-    const c = computeClientScore(r, keywords, queryZones);
-    return { ...r, _idx: i, _rel: ai, _clientScore: c.score, _matched: c.matchedCount,
+    const c = computeClientScore(r, groups, queryZones);
+    return { ...r, _idx: i, _rel: ai, _clientScore: c.score, _matched: c.matchedGroups,
              _geoMismatch: c.geoMismatch, _score: ai ? ai.score : c.score };
   });
 
@@ -1973,11 +2037,23 @@ function getProcessedResults() {
     if (inZone.length > 0) list = inZone;
   }
 
-  // Filtre de pertinence : on masque ce qui ne contient AUCUN mot-clé saisi
-  // et que l'IA n'a pas jugé pertinent. Garde-fou : ne jamais tout masquer.
-  if (keywords.length) {
-    const relevant = list.filter(r => r._matched > 0 || (r._rel && r._rel.score >= 40));
-    if (relevant.length > 0) list = relevant;
+  // Filtre de pertinence selon le mode des mots-clés :
+  //  • strict : tous les groupes doivent matcher
+  //  • souple : on garde le meilleur palier de correspondance disponible (max possible)
+  //  • ou     : au moins un groupe doit matcher
+  // L'IA (score ≥ 40) peut toujours rattraper un résultat. Garde-fou : jamais tout masquer.
+  if (nGroups) {
+    const aiKeep = r => r._rel && r._rel.score >= 40;
+    let kept;
+    if (keywordMode === 'strict') {
+      kept = list.filter(r => r._matched === nGroups || aiKeep(r));
+    } else if (keywordMode === 'ou') {
+      kept = list.filter(r => r._matched >= 1 || aiKeep(r));
+    } else { // souple : palier de correspondance maximal présent
+      const maxM = list.reduce((m, r) => Math.max(m, r._matched), 0);
+      kept = maxM > 0 ? list.filter(r => r._matched === maxM || aiKeep(r)) : list;
+    }
+    if (kept.length > 0) list = kept;
   }
 
   list.sort((a, b) => (b._score - a._score) || (b._matched - a._matched));

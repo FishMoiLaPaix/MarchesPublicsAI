@@ -84,8 +84,15 @@ function boampToday() { return new Date().toISOString().slice(0, 10); }
 function boampWhere(opts = {}) {
   const esc = s => String(s).replace(/["\\]/g, ' ').trim();
   const clauses = [];
-  const kws = (Array.isArray(opts.keywords) ? opts.keywords : []).map(esc).filter(w => w.length >= 3);
-  kws.forEach(w => clauses.push(`objet like "${w}"`));
+
+  // Groupes de mots-clés (séparés par ; côté UI) combinés selon le mode de pertinence :
+  // strict = ET (tous), souple/ou = OU (le client affinera ensuite).
+  const groups = (Array.isArray(opts.keywordGroups) ? opts.keywordGroups : [])
+    .map(esc).filter(g => g.length >= 2);
+  if (groups.length) {
+    const joiner = (opts.keywordMode === 'strict') ? ' and ' : ' or ';
+    clauses.push('(' + groups.map(g => `objet like "${g}"`).join(joiner) + ')');
+  }
 
   const depts = Array.isArray(opts.depts) ? opts.depts : [];
   if (depts.length) {
@@ -622,11 +629,11 @@ async function callAI(config, systemPrompt, userPrompt) {
 // ─── IPC handlers ────────────────────────────────────────────────────────────
 ipcMain.handle('get-sources', () => SOURCES.map(s => ({ id: s.id, name: s.name, country: s.country, description: s.description, url: s.url })));
 
-ipcMain.handle('search-source', async (_, { sourceId, query, offset = 0, keywords, depts, facets }) => {
+ipcMain.handle('search-source', async (_, { sourceId, query, offset = 0, keywords, depts, facets, keywordGroups, keywordMode }) => {
   const source = SOURCES.find(s => s.id === sourceId);
   if (!source) return { sourceId, results: [], total: 0, error: 'Source inconnue' };
   try {
-    const raw = await source.search(query, offset, { keywords, depts, facets });
+    const raw = await source.search(query, offset, { keywords, depts, facets, keywordGroups, keywordMode });
     const results = Array.isArray(raw) ? raw : (raw.results || []);
     const total = Array.isArray(raw) ? raw.length : (raw.total || results.length);
     return { sourceId, results, total };
