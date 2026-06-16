@@ -149,6 +149,8 @@ $SC.TargetPath = "powershell.exe"
 $SC.Arguments = "-WindowStyle Hidden -ExecutionPolicy Bypass -File `"$AppDir\launch.ps1`""
 $SC.WorkingDirectory = $AppDir
 $SC.Description = "MarchesPublics AI"
+$IconPath = "$AppDir\assets\icon.ico"
+if (Test-Path $IconPath) { $SC.IconLocation = "$IconPath,0" }
 $SC.Save()
 Write-Host "  OK Raccourci Bureau mis a jour" -ForegroundColor Green
 
