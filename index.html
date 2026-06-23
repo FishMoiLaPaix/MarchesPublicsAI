@@ -534,6 +534,89 @@
     text-decoration: none;
   }
 
+  /* ─── Corbeille / suppression d'offres ───────────────────────── */
+  .card-actions { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+  .card-trash {
+    background: none; border: none; cursor: pointer;
+    font-size: 13px; opacity: 0.5; padding: 2px 5px; border-radius: 4px;
+    line-height: 1; transition: all 0.15s; color: var(--text3);
+  }
+  .card-trash:hover { opacity: 1; background: rgba(244,67,54,0.14); color: #f44336; }
+  .result-card.pending-delete { opacity: 0.5; border-color: #f44336; background: rgba(244,67,54,0.06); }
+  .result-card.pending-delete .card-trash { opacity: 1; color: #f44336; }
+
+  .trash-open-btn {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 4px 11px; margin-left: 10px;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); color: var(--text2);
+    font-size: 11px; cursor: pointer; white-space: nowrap;
+  }
+  .trash-open-btn:hover { border-color: var(--blue); color: var(--blue); }
+  .trash-badge {
+    background: #f44336; color: #fff; border-radius: 9px;
+    font-size: 10px; font-weight: 700; padding: 1px 6px; min-width: 16px; text-align: center;
+  }
+
+  /* Barre flottante de validation de suppression */
+  .delete-bar {
+    position: fixed; left: 50%; bottom: 22px;
+    transform: translateX(-50%) translateY(150%);
+    display: flex; align-items: center; gap: 14px;
+    background: var(--bg2); border: 1px solid #f44336;
+    border-radius: 12px; padding: 10px 16px; z-index: 90;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.45); opacity: 0;
+    transition: transform 0.22s ease, opacity 0.22s ease;
+  }
+  .delete-bar.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+  .delete-bar-confirm {
+    display: inline-flex; align-items: center; gap: 7px;
+    background: #f44336; color: #fff; border: none; border-radius: 8px;
+    padding: 8px 16px; font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+  .delete-bar-confirm:hover { background: #d32f2f; }
+  .delete-bar-cancel { background: none; border: none; color: var(--text3); font-size: 12px; cursor: pointer; }
+  .delete-bar-cancel:hover { color: var(--text); }
+
+  /* Bannière de mise à jour */
+  .update-banner {
+    display: none; align-items: center; justify-content: space-between; gap: 14px;
+    padding: 9px 20px;
+    background: linear-gradient(90deg, rgba(74,158,255,0.16), rgba(124,58,237,0.16));
+    border-bottom: 1px solid var(--border2); font-size: 12.5px; color: var(--text);
+  }
+  .update-banner.show { display: flex; }
+  .update-banner-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  .update-banner button {
+    padding: 6px 14px; border-radius: var(--radius-sm);
+    font-size: 12px; font-weight: 600; cursor: pointer; border: none;
+  }
+  .update-banner #update-install-btn { background: var(--blue); color: #fff; }
+  .update-banner #update-install-btn:disabled { opacity: 0.6; cursor: default; }
+  .update-banner .update-dismiss { background: transparent; border: 1px solid var(--border); color: var(--text2); font-weight: 500; }
+
+  /* Modal corbeille */
+  .trash-list { max-height: 50vh; overflow-y: auto; margin: 6px 0 4px; display: flex; flex-direction: column; gap: 8px; }
+  .trash-item {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 10px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  }
+  .trash-item-main { flex: 1; min-width: 0; }
+  .trash-item-title { font-size: 12.5px; font-weight: 600; color: var(--text); line-height: 1.35; }
+  .trash-item-desc { font-size: 11px; color: var(--text3); margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .trash-restore {
+    flex-shrink: 0; background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text2); border-radius: 6px; font-size: 11px; padding: 5px 10px; cursor: pointer; white-space: nowrap;
+  }
+  .trash-restore:hover { border-color: var(--blue); color: var(--blue); }
+  .trash-empty-msg { font-size: 12px; color: var(--text3); text-align: center; padding: 24px 0; }
+  .trash-reset-link {
+    display: block; margin: 16px auto 0; text-align: center;
+    font-size: 10.5px; color: var(--text3); opacity: 0.5; cursor: pointer;
+    text-decoration: underline; background: none; border: none;
+  }
+  .trash-reset-link:hover { opacity: 1; color: var(--text2); }
+
   /* Group headers */
   .group-header {
     display: flex;
@@ -916,6 +999,15 @@
   <!-- Main -->
   <main class="main">
 
+    <!-- Bannière de mise à jour -->
+    <div class="update-banner" id="update-banner">
+      <span>⬆ Une nouvelle version est disponible sur GitHub.</span>
+      <div class="update-banner-actions">
+        <button id="update-install-btn">Installer et redémarrer</button>
+        <button class="update-dismiss" id="update-dismiss-btn">Plus tard</button>
+      </div>
+    </div>
+
     <!-- Search -->
     <div class="search-area">
       <div class="search-row">
@@ -1039,6 +1131,9 @@
           <span class="toggle-label">Analyse IA</span>
         </label>
         <span class="result-count" id="result-count"></span>
+        <button class="trash-open-btn" id="trash-open-btn" title="Offres supprimées">
+          🗑 Corbeille<span class="trash-badge" id="trash-badge" style="display:none">0</span>
+        </button>
       </div>
     </div>
 
@@ -1099,6 +1194,26 @@
   </div>
 </div>
 
+<!-- Barre flottante : valider la suppression des offres marquées -->
+<div class="delete-bar" id="delete-bar">
+  <button class="delete-bar-confirm" id="delete-bar-confirm">🗑 Valider la suppression (<span id="delete-bar-count">0</span>)</button>
+  <button class="delete-bar-cancel" id="delete-bar-cancel">Annuler</button>
+</div>
+
+<!-- Modal corbeille -->
+<div class="modal-overlay" id="trash-overlay">
+  <div class="modal">
+    <h2>🗑 Corbeille</h2>
+    <p>Les offres supprimées n'apparaissent plus dans vos recherches. Restaurez-en une, ou videz la corbeille pour les masquer définitivement.</p>
+    <div class="trash-list" id="trash-list"></div>
+    <div class="modal-actions">
+      <button class="btn-secondary" id="trash-close-btn">Fermer</button>
+      <button class="btn-primary" id="trash-empty-btn" style="background:#f44336">Vider la corbeille</button>
+    </div>
+    <button class="trash-reset-link" id="trash-reset-btn" title="Rendre à nouveau visibles TOUTES les offres supprimées">Tout réinitialiser (réafficher toutes les offres supprimées)</button>
+  </div>
+</div>
+
 <script>
 // ─── State ──────────────────────────────────────────────────────────────────
 let sources = [];
@@ -1120,6 +1235,12 @@ let sourceTotals = {};    // { sourceId: totalFromAPI }
 const PAGE_SIZE = 10;
 let currentPage = 1;
 let processedResults = []; // résultats filtrés + triés (cache du dernier rendu)
+
+// Corbeille / suppression d'offres
+let hiddenOffers = new Set();    // clés des offres masquées (blacklist persistante)
+let trashOffers = [];            // offres présentes dans la corbeille (visibles, restaurables)
+let pendingDelete = new Map();   // clé -> offre, marquées mais pas encore validées
+let pendingUpdateSha = null;     // commit GitHub à appliquer si mise à jour dispo
 
 // Critères de recherche (facettes)
 const facets = { typeMarche: '', famille: '', procedure: '', nature: '', etat: '' };
@@ -1156,6 +1277,16 @@ async function init() {
   renderRecentKeywords(recentKeywords || []);
   renderRecentConfigs(recentConfigs || []);
   updateSaveCfgRow();
+
+  // Corbeille : restaure la blacklist + le contenu de la corbeille
+  const [hidden, trash] = await Promise.all([storeGet('hidden-offers'), storeGet('trash-offers')]);
+  hiddenOffers = new Set(Array.isArray(hidden) ? hidden : []);
+  trashOffers = Array.isArray(trash) ? trash : [];
+  updateTrashCount();
+
+  setupTrashUI();
+  setupUpdateUI();
+  checkForUpdate();   // vérifie GitHub en tâche de fond
 }
 
 // ─── Config persist ───────────────────────────────────────────────────────────
@@ -2071,6 +2202,9 @@ function getProcessedResults() {
              _geoMismatch: c.geoMismatch, _score: ai ? ai.score : c.score };
   });
 
+  // Corbeille : on écarte définitivement les offres supprimées par l'utilisateur
+  if (hiddenOffers.size) list = list.filter(r => !hiddenOffers.has(offerKey(r)));
+
   // Filtres de dates (publication + clôture) et d'état
   list = list.filter(r => dateInRange(r.date, dateState.pub)
                        && dateInRange(r.datelimite, dateState.close)
@@ -2191,7 +2325,8 @@ function renderResults() {
 
 function makeCard(result, highlighted) {
   const card = document.createElement('div');
-  card.className = 'result-card' + (highlighted ? ' highlighted' : '');
+  const key = offerKey(result);
+  card.className = 'result-card' + (highlighted ? ' highlighted' : '') + (pendingDelete.has(key) ? ' pending-delete' : '');
 
   const score = result._rel?.score ?? result._score;
   const scoreColor = score >= 80 ? '#00e676' : score >= 60 ? '#4a9eff' : '#ff9800';
@@ -2216,13 +2351,20 @@ function makeCard(result, highlighted) {
     ` : ''}
     <div class="card-footer">
       <span class="card-date">${result.date ? '📅 ' + result.date : ''}${result.datelimite ? '   ⏰ clôture ' + result.datelimite : ''}${result.procedure ? '   · ' + escHtml(result.procedure) : ''}</span>
-      <a class="card-link" href="#">Ouvrir →</a>
+      <div class="card-actions">
+        <button class="card-trash" title="Supprimer cette offre">${pendingDelete.has(key) ? '✓ marquée' : '🗑'}</button>
+        <a class="card-link" href="#">Ouvrir →</a>
+      </div>
     </div>
   `;
 
   card.querySelector('.card-link')?.addEventListener('click', (e) => {
     e.stopPropagation();
     if (result.url) window.api.openUrl(result.url);
+  });
+  card.querySelector('.card-trash')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    togglePending(result);
   });
   card.addEventListener('click', () => { if (result.url) window.api.openUrl(result.url); });
 
@@ -2231,6 +2373,162 @@ function makeCard(result, highlighted) {
 
 function escHtml(str) {
   return (str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ─── Corbeille : suppression / restauration des offres ─────────────────────────
+// Clé d'identité stable d'une offre (URL + titre) pour la blacklist persistante.
+function offerKey(r) { return (r.url || '') + '|' + (r.title || ''); }
+
+async function persistTrash() {
+  await storeSet('hidden-offers', [...hiddenOffers]);
+  await storeSet('trash-offers', trashOffers);
+}
+
+// Marque / démarque une offre en attente de suppression.
+function togglePending(result) {
+  const key = offerKey(result);
+  if (pendingDelete.has(key)) pendingDelete.delete(key);
+  else pendingDelete.set(key, result);
+  updateDeleteBar();
+  renderResults(); // reflète l'état "marquée" sur la page courante
+}
+
+function updateDeleteBar() {
+  const bar = document.getElementById('delete-bar');
+  const n = pendingDelete.size;
+  document.getElementById('delete-bar-count').textContent = n;
+  bar.classList.toggle('show', n > 0);
+}
+
+// Valide la suppression : déplace les offres marquées vers la corbeille + blacklist.
+async function confirmDelete() {
+  if (pendingDelete.size === 0) return;
+  for (const [key, o] of pendingDelete) {
+    hiddenOffers.add(key);
+    if (!trashOffers.some(x => offerKey(x) === key)) {
+      trashOffers.unshift({ title: o.title, desc: o.desc, url: o.url, date: o.date,
+        datelimite: o.datelimite, procedure: o.procedure, sourceName: o.sourceName });
+    }
+  }
+  pendingDelete.clear();
+  await persistTrash();
+  updateDeleteBar();
+  updateTrashCount();
+  refreshResults();
+}
+
+function cancelDelete() {
+  pendingDelete.clear();
+  updateDeleteBar();
+  renderResults();
+}
+
+function updateTrashCount() {
+  const badge = document.getElementById('trash-badge');
+  if (!badge) return;
+  badge.textContent = trashOffers.length;
+  badge.style.display = trashOffers.length > 0 ? '' : 'none';
+}
+
+function renderTrash() {
+  const list = document.getElementById('trash-list');
+  list.innerHTML = '';
+  if (trashOffers.length === 0) {
+    list.innerHTML = '<div class="trash-empty-msg">La corbeille est vide.</div>';
+  } else {
+    trashOffers.forEach(o => {
+      const item = document.createElement('div');
+      item.className = 'trash-item';
+      item.innerHTML = `
+        <div class="trash-item-main">
+          <div class="trash-item-title">${escHtml(o.title || 'Offre')}</div>
+          ${o.desc ? `<div class="trash-item-desc">${escHtml(o.desc)}</div>` : ''}
+        </div>
+        <button class="trash-restore">↩ Restaurer</button>`;
+      item.querySelector('.trash-restore').addEventListener('click', () => restoreOne(o));
+      list.appendChild(item);
+    });
+  }
+  document.getElementById('trash-empty-btn').disabled = trashOffers.length === 0;
+}
+
+// Restaure une offre : elle réapparaît dans les recherches.
+async function restoreOne(o) {
+  const key = offerKey(o);
+  hiddenOffers.delete(key);
+  trashOffers = trashOffers.filter(x => offerKey(x) !== key);
+  await persistTrash();
+  updateTrashCount();
+  renderTrash();
+  refreshResults();
+}
+
+// Vide la corbeille : les offres restent masquées mais disparaissent du bac.
+async function emptyTrash() {
+  if (trashOffers.length === 0) return;
+  if (!confirm('Vider la corbeille ?\n\nCes offres resteront masquées de vos recherches, mais disparaîtront de la corbeille.')) return;
+  trashOffers = [];
+  await persistTrash();
+  updateTrashCount();
+  renderTrash();
+}
+
+// Réinitialisation totale : toutes les offres supprimées redeviennent visibles.
+async function resetAllTrash() {
+  if (hiddenOffers.size === 0 && trashOffers.length === 0) return;
+  if (!confirm('Tout réinitialiser ?\n\nToutes les offres supprimées (y compris celles déjà retirées de la corbeille) redeviendront visibles dans vos recherches.')) return;
+  hiddenOffers.clear();
+  trashOffers = [];
+  await persistTrash();
+  updateTrashCount();
+  renderTrash();
+  refreshResults();
+}
+
+function setupTrashUI() {
+  const overlay = document.getElementById('trash-overlay');
+  document.getElementById('trash-open-btn').addEventListener('click', () => { renderTrash(); overlay.classList.add('show'); });
+  document.getElementById('trash-close-btn').addEventListener('click', () => overlay.classList.remove('show'));
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.classList.remove('show'); });
+  document.getElementById('trash-empty-btn').addEventListener('click', emptyTrash);
+  document.getElementById('trash-reset-btn').addEventListener('click', resetAllTrash);
+  document.getElementById('delete-bar-confirm').addEventListener('click', confirmDelete);
+  document.getElementById('delete-bar-cancel').addEventListener('click', cancelDelete);
+}
+
+// ─── Mise à jour depuis GitHub ─────────────────────────────────────────────────
+async function checkForUpdate() {
+  try {
+    if (!window.api.checkUpdate) return;
+    const res = await window.api.checkUpdate();
+    if (res && res.ok && res.updateAvailable) {
+      pendingUpdateSha = res.remote;
+      document.getElementById('update-banner').classList.add('show');
+    }
+  } catch {}
+}
+
+function setupUpdateUI() {
+  document.getElementById('update-dismiss-btn').addEventListener('click', () => {
+    document.getElementById('update-banner').classList.remove('show');
+  });
+  document.getElementById('update-install-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('update-install-btn');
+    btn.disabled = true; btn.textContent = 'Téléchargement…';
+    try {
+      const res = await window.api.applyUpdate(pendingUpdateSha);
+      if (res && res.ok) {
+        btn.textContent = 'Redémarrage…';
+        await window.api.restartApp();
+      } else {
+        btn.disabled = false; btn.textContent = 'Réessayer';
+        alert('Échec de la mise à jour : ' + (res?.error || 'erreur inconnue'));
+      }
+    } catch (e) {
+      btn.disabled = false; btn.textContent = 'Réessayer';
+      alert('Échec de la mise à jour : ' + (e.message || e));
+    }
+  });
 }
 
 // ─── Modal ────────────────────────────────────────────────────────────────────

@@ -65,6 +65,88 @@ function saveStore() {
 ipcMain.handle('store-get', (event, key) => loadStore()[key] ?? null);
 ipcMain.handle('store-set', (event, key, value) => { loadStore()[key] = value; saveStore(); return true; });
 
+// ─── Mise à jour automatique depuis GitHub ───────────────────────────────────
+// L'app est distribuée en fichiers clairs (main.js, preload.js, index.html,
+// package.json) chargés directement depuis le dossier d'installation. Mettre à
+// jour = comparer le dernier commit publié sur GitHub au commit déjà appliqué,
+// puis retélécharger ces fichiers et relancer l'app.
+const UPDATE_REPO = 'Renan-projects/MarchesPublicsAI';
+const UPDATE_BRANCH = 'main';
+const UPDATE_FILES = ['main.js', 'preload.js', 'index.html', 'package.json'];
+
+// Jeton GitHub optionnel (stocké localement). Requis uniquement si le dépôt est
+// privé ; pour un dépôt public, tout fonctionne sans jeton.
+function ghToken() { return loadStore()['github-token'] || null; }
+function ghHeaders(accept) {
+  const tok = ghToken();
+  return { 'Accept': accept, ...(tok ? { 'Authorization': 'Bearer ' + tok } : {}) };
+}
+
+async function fetchRemoteCommit() {
+  const txt = await fetchText(
+    `https://api.github.com/repos/${UPDATE_REPO}/commits/${UPDATE_BRANCH}`,
+    ghHeaders('application/vnd.github+json'));
+  const d = JSON.parse(txt);
+  return d && d.sha ? String(d.sha) : null;
+}
+
+// Télécharge un fichier à un commit précis. Avec jeton → API Contents (gère les
+// dépôts privés) ; sans jeton → CDN raw (dépôt public, sans limite d'API).
+function downloadUpdateFile(file, sha) {
+  if (ghToken()) {
+    return fetchText(`https://api.github.com/repos/${UPDATE_REPO}/contents/${file}?ref=${sha}`,
+      ghHeaders('application/vnd.github.raw'));
+  }
+  return fetchText(`https://raw.githubusercontent.com/${UPDATE_REPO}/${sha}/${file}`);
+}
+
+ipcMain.handle('update-check', async () => {
+  try {
+    const remote = await fetchRemoteCommit();
+    if (!remote) return { ok: false, error: 'Commit distant introuvable' };
+    const store = loadStore();
+    // Premier lancement : on adopte le commit courant comme référence sans rien
+    // télécharger (les fichiers locaux sont à jour au moment de l'installation).
+    if (!store['applied-commit']) {
+      store['applied-commit'] = remote;
+      saveStore();
+      return { ok: true, updateAvailable: false, remote, applied: remote };
+    }
+    return { ok: true, updateAvailable: remote !== store['applied-commit'], remote, applied: store['applied-commit'] };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});
+
+ipcMain.handle('update-apply', async (_, sha) => {
+  try {
+    const remote = sha || await fetchRemoteCommit();
+    if (!remote) return { ok: false, error: 'Commit distant introuvable' };
+    // On télécharge TOUT en mémoire d'abord ; on n'écrit qu'ensuite, pour éviter
+    // un état à moitié mis à jour si un téléchargement échoue.
+    const downloaded = {};
+    for (const f of UPDATE_FILES) {
+      const txt = await downloadUpdateFile(f, remote);
+      if (txt == null || txt === '') throw new Error('Téléchargement vide : ' + f);
+      downloaded[f] = txt;
+    }
+    for (const f of UPDATE_FILES) {
+      fs.writeFileSync(path.join(__dirname, f), downloaded[f], 'utf8');
+    }
+    const store = loadStore();
+    store['applied-commit'] = remote;
+    saveStore();
+    return { ok: true, remote };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});
+
+ipcMain.handle('update-restart', () => {
+  app.relaunch();
+  app.exit(0);
+});
+
 ipcMain.on('set-theme', (event, theme) => {
   if (!mainWindow) return;
   if (theme === 'light') {
@@ -529,6 +611,31 @@ function fetchJson(url, timeout = 15000) {
       let data = '';
       res.on('data', chunk => data += chunk);
       res.on('end', () => { try { resolve(JSON.parse(data)); } catch { reject(new Error('Réponse non-JSON: ' + data.slice(0, 120))); } });
+    });
+    req.on('error', reject);
+    req.on('timeout', () => { req.destroy(); reject(new Error('Timeout')); });
+  });
+}
+
+// Télécharge une ressource texte brute (utilisé par l'updater). Accepte des
+// en-têtes supplémentaires (ex : Authorization pour un dépôt GitHub privé).
+function fetchText(url, extraHeaders = {}, timeout = 20000) {
+  return new Promise((resolve, reject) => {
+    const parsed = new URL(url);
+    const lib = parsed.protocol === 'https:' ? https : http;
+    const req = lib.get(url, {
+      headers: { 'User-Agent': 'MarchesPublicsAI-Updater', 'Accept': '*/*', ...extraHeaders },
+      timeout
+    }, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        res.resume();
+        return fetchText(res.headers.location, extraHeaders, timeout).then(resolve).catch(reject);
+      }
+      if (res.statusCode >= 400) { res.resume(); return reject(new Error(`HTTP ${res.statusCode}`)); }
+      let data = '';
+      res.setEncoding('utf8');
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => resolve(data));
     });
     req.on('error', reject);
     req.on('timeout', () => { req.destroy(); reject(new Error('Timeout')); });
