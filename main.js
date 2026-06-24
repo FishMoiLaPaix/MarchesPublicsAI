@@ -4,6 +4,8 @@ const https = require('https');
 const http = require('http');
 const { URL } = require('url');
 const fs = require('fs');
+const os = require('os');
+const crypto = require('crypto');
 
 let mainWindow;
 
@@ -668,9 +670,229 @@ function postJson(url, body, timeout = 20000) {
   });
 }
 
+// ─── persoIA : authentification partagée (port Node de persoia-auth) ─────────────
+// Store commun à tous les outils persoIA : %APPDATA%\persoia\config.env (Windows)
+// ou ~/.config/persoia/config.env (Unix). L'utilisateur s'identifie une seule fois
+// via un login navigateur (serveur loopback éphémère), la clé est mémorisée et
+// relue par chaque outil. Mêmes endpoints/flux que persoia-cli. Zéro dépendance.
+const PERSOIA_DEFAULT_BASE = 'https://chat.persoia.com/v1';
+const PERSOIA_DEMO_BASE = 'https://demo.chat.persoia.com/v1';
+const PERSOIA_CLIENT = 'marchespublicsai';
+
+function persoiaConfigDir() {
+  if (process.platform === 'win32') {
+    const base = process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming');
+    return path.join(base, 'persoia');
+  }
+  const base = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config');
+  return path.join(base, 'persoia');
+}
+function persoiaConfigPath() {
+  return process.env.PERSOIA_CONFIG || path.join(persoiaConfigDir(), 'config.env');
+}
+function readPersoiaFileConfig() {
+  const out = {};
+  try {
+    const raw = fs.readFileSync(persoiaConfigPath(), 'utf8');
+    for (const line0 of raw.split(/\r?\n/)) {
+      const line = line0.trim();
+      if (!line || line.startsWith('#') || !line.includes('=')) continue;
+      const i = line.indexOf('=');
+      out[line.slice(0, i).trim()] = line.slice(i + 1).trim();
+    }
+  } catch {}
+  return out;
+}
+// URL de base : explicite > préfixe du token (démo/prod).
+function resolvePersoiaApiBase(key, explicit) {
+  if (explicit && explicit.trim()) return explicit.trim();
+  if ((key || '').trim().startsWith('persoia_demo_sk_')) return PERSOIA_DEMO_BASE;
+  return PERSOIA_DEFAULT_BASE;
+}
+// Variables d'environnement prioritaires sur le fichier ; base auto-déduite du token.
+function loadPersoiaConfig() {
+  const file = readPersoiaFileConfig();
+  const cfg = {
+    PERSOIA_API_KEY: process.env.PERSOIA_API_KEY || file.PERSOIA_API_KEY || '',
+    PERSOIA_API_BASE: process.env.PERSOIA_API_BASE || file.PERSOIA_API_BASE || '',
+    PERSOIA_MODEL: process.env.PERSOIA_MODEL || file.PERSOIA_MODEL || '',
+    PERSOIA_TENANT_NAME: process.env.PERSOIA_TENANT_NAME || file.PERSOIA_TENANT_NAME || ''
+  };
+  cfg.PERSOIA_API_BASE = resolvePersoiaApiBase(cfg.PERSOIA_API_KEY, cfg.PERSOIA_API_BASE);
+  return cfg;
+}
+// Écrit la config (perms 0600 sur Unix), en fusionnant avec l'existant. Une valeur
+// vide n'est pas réécrite → c'est le mécanisme de suppression (logout).
+function savePersoiaConfig(values) {
+  const current = {};
+  const existing = readPersoiaFileConfig();
+  for (const k of Object.keys(existing)) if (k.startsWith('PERSOIA_')) current[k] = existing[k];
+  for (const k of Object.keys(values)) if (k.startsWith('PERSOIA_')) current[k] = values[k];
+  try { fs.mkdirSync(persoiaConfigDir(), { recursive: true }); } catch {}
+  const lines = ['# persoIA configuration — partagée par les outils persoIA'];
+  for (const k of Object.keys(current).sort()) if (current[k]) lines.push(`${k}=${current[k]}`);
+  const content = lines.join('\n') + '\n';
+  const p = persoiaConfigPath();
+  if (process.platform === 'win32') {
+    fs.writeFileSync(p, content, 'utf8');
+  } else {
+    const fd = fs.openSync(p, 'w', 0o600);
+    try { fs.writeSync(fd, content); } finally { fs.closeSync(fd); }
+    try { fs.chmodSync(p, 0o600); } catch {}
+  }
+}
+function persoiaLogout() { savePersoiaConfig({ PERSOIA_API_KEY: '' }); }
+
+function persoiaTimingSafeEqual(a, b) {
+  const ba = Buffer.from(String(a)), bb = Buffer.from(String(b));
+  if (ba.length !== bb.length) return false;
+  try { return crypto.timingSafeEqual(ba, bb); } catch { return false; }
+}
+// Origine du portail web (https://<host>) déduite de l'API base, host de confiance.
+function persoiaPortalBase(config) {
+  let host;
+  try { host = (new URL(config.PERSOIA_API_BASE || PERSOIA_DEFAULT_BASE).hostname || 'chat.persoia.com').toLowerCase(); }
+  catch { host = 'chat.persoia.com'; }
+  let portalHost;
+  if (host !== 'persoia.com' && !host.endsWith('.persoia.com')) portalHost = 'chat.persoia.com';
+  else if (host.startsWith('api.')) portalHost = 'chat.' + host.slice(4);
+  else portalHost = host;
+  return `https://${portalHost}`;
+}
+// Renvoie raw si c'est une URL https *.persoia.com sûre, sinon "".
+function validPersoiaApiBase(raw) {
+  raw = (raw || '').trim();
+  try {
+    const p = new URL(raw);
+    if (p.protocol === 'https:' && p.hostname && (p.hostname === 'persoia.com' || p.hostname.endsWith('.persoia.com'))) return raw;
+  } catch {}
+  return '';
+}
+
+// Login navigateur (flux loopback). Démarre un serveur 127.0.0.1 éphémère, ouvre le
+// portail /cli, capture la clé émise sur le callback (state anti-CSRF usage unique,
+// CORS limité à l'origine du portail, preflight Private Network Access géré).
+function persoiaLogin(client = PERSOIA_CLIENT, timeoutMs = 180000) {
+  return new Promise((resolve) => {
+    const config = loadPersoiaConfig();
+    const portal = persoiaPortalBase(config);
+    const state = crypto.randomBytes(24).toString('base64url');
+    const result = {};
+    let settled = false, timer = null;
+
+    const server = http.createServer((req, res) => {
+      let u;
+      try { u = new URL(req.url, 'http://127.0.0.1'); } catch { res.statusCode = 400; res.end(); return; }
+      const cors = () => {
+        res.setHeader('Access-Control-Allow-Origin', portal);
+        res.setHeader('Vary', 'Origin');
+        res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+      };
+      const page = (status, message) => {
+        res.statusCode = status; cors();
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.end(`<!doctype html><html lang='fr'><meta charset='utf-8'><title>persoIA</title>`
+          + `<body style='font-family:sans-serif;text-align:center;margin-top:4em'>`
+          + `<h2>${message}</h2><p>Vous pouvez fermer cet onglet.</p></body></html>`);
+      };
+      const accept = (token, gotState, extra) => {
+        if (result.token) { page(200, 'Connexion déjà reçue.'); return true; } // usage unique
+        if (!gotState || !persoiaTimingSafeEqual(gotState, state)) { page(400, 'État invalide — connexion refusée.'); return false; }
+        if (!token) { page(400, 'Token manquant.'); return false; }
+        result.token = token;
+        const vb = validPersoiaApiBase(extra.api_base);
+        if (vb) result.api_base = vb;
+        if (extra.model) result.model = extra.model;
+        if (extra.tenant_name) result.tenant_name = extra.tenant_name;
+        page(200, 'Connexion réussie !');
+        return true;
+      };
+
+      if (req.method === 'OPTIONS') {
+        res.statusCode = 204; cors();
+        if (req.headers['access-control-request-private-network'] === 'true')
+          res.setHeader('Access-Control-Allow-Private-Network', 'true');
+        res.end();
+        return;
+      }
+      if (u.pathname !== '/callback') { res.statusCode = 404; res.end(); return; }
+      if (req.method === 'POST') {
+        let body = '';
+        req.on('data', (c) => { body += c; if (body.length > 1e6) req.destroy(); });
+        req.on('end', () => {
+          let data = {};
+          try { data = JSON.parse(body); } catch {}
+          if (!data || typeof data !== 'object') data = {};
+          if (accept(String(data.token || ''), String(data.state || ''), data)) finish();
+        });
+        return;
+      }
+      if (req.method === 'GET') {
+        const q = u.searchParams;
+        const extra = { api_base: q.get('api_base') || '', model: q.get('model') || '', tenant_name: q.get('tenant_name') || '' };
+        if (accept(q.get('token') || '', q.get('state') || '', extra)) finish();
+        return;
+      }
+      res.statusCode = 405; res.end();
+    });
+
+    const finish = () => {
+      if (settled) return; settled = true;
+      if (timer) clearTimeout(timer);
+      try { server.close(); } catch {}
+      if (result.token) {
+        const values = { PERSOIA_API_KEY: result.token };
+        if (result.api_base) values.PERSOIA_API_BASE = result.api_base;
+        if (result.model) values.PERSOIA_MODEL = result.model;
+        if (result.tenant_name) values.PERSOIA_TENANT_NAME = result.tenant_name;
+        savePersoiaConfig(values);
+        resolve({ ok: true });
+      } else {
+        resolve({ ok: false });
+      }
+    };
+
+    server.on('error', (e) => { if (!settled) { settled = true; resolve({ ok: false, error: e.message }); } });
+    server.listen(0, '127.0.0.1', () => {
+      const port = server.address().port;
+      const params = new URLSearchParams({ callback: `http://127.0.0.1:${port}/callback`, state });
+      if (client) params.set('client', client);
+      shell.openExternal(`${portal}/cli?${params.toString()}`);
+      timer = setTimeout(() => {
+        if (settled) return; settled = true;
+        try { server.close(); } catch {}
+        resolve({ ok: false, error: 'Délai de connexion dépassé.' });
+      }, timeoutMs);
+    });
+  });
+}
+
+ipcMain.handle('persoia-status', () => {
+  const c = loadPersoiaConfig();
+  return { connected: !!c.PERSOIA_API_KEY, apiBase: c.PERSOIA_API_BASE, model: c.PERSOIA_MODEL, tenant: c.PERSOIA_TENANT_NAME };
+});
+ipcMain.handle('persoia-login', async () => {
+  try {
+    const r = await persoiaLogin();
+    const c = loadPersoiaConfig();
+    return { ok: !!r.ok, connected: !!c.PERSOIA_API_KEY, apiBase: c.PERSOIA_API_BASE, model: c.PERSOIA_MODEL, tenant: c.PERSOIA_TENANT_NAME, error: r.error };
+  } catch (e) { return { ok: false, connected: false, error: e.message }; }
+});
+ipcMain.handle('persoia-logout', () => { try { persoiaLogout(); } catch {} return { ok: true }; });
+
 // ─── AI call (multi-provider) ────────────────────────────────────────────────
 async function callAI(config, systemPrompt, userPrompt) {
-  const { provider, apiKey, endpoint, model } = config;
+  let { provider, apiKey, endpoint, model } = config;
+
+  // persoIA : la clé/endpoint proviennent du store partagé, pas du formulaire.
+  if (provider === 'persoia') {
+    const pc = loadPersoiaConfig();
+    if (!pc.PERSOIA_API_KEY) throw new Error('Non connecté à persoIA. Cliquez sur « Se connecter à persoIA ».');
+    apiKey = pc.PERSOIA_API_KEY;
+    endpoint = (endpoint && endpoint.trim()) || (pc.PERSOIA_API_BASE.replace(/\/+$/, '') + '/chat/completions');
+    model = (model && model.trim()) || pc.PERSOIA_MODEL || '';
+  }
 
   const providers = {
     anthropic: {
@@ -702,6 +924,12 @@ async function callAI(config, systemPrompt, userPrompt) {
       headers: { 'Authorization': `Bearer ${apiKey}`, 'content-type': 'application/json' },
       body: { model: model || 'default', messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }] },
       extract: (d) => d.choices?.[0]?.message?.content || d.content?.[0]?.text || d.response || JSON.stringify(d)
+    },
+    persoia: {
+      url: endpoint,
+      headers: { 'Authorization': `Bearer ${apiKey}`, 'X-Persoia-Client': PERSOIA_CLIENT, 'content-type': 'application/json' },
+      body: { model: model || 'default', messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }] },
+      extract: (d) => d.choices?.[0]?.message?.content || ''
     }
   };
 

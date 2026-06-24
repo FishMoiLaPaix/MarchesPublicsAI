@@ -161,6 +161,14 @@
   }
   .provider-btn:hover { border-color: var(--blue); color: var(--blue); }
   .provider-btn.active { background: var(--blue-glow); border-color: var(--blue); color: var(--blue); }
+  .provider-btn.persoia-btn { font-size: 12px; padding: 9px 4px;
+    border-color: rgba(124,58,237,0.5); color: #b794f6; }
+  .provider-btn.persoia-btn:hover { border-color: #7c3aed; color: #c4a7f7; }
+  .provider-btn.persoia-btn.active { background: rgba(124,58,237,0.16); border-color: #7c3aed; color: #c4a7f7; }
+
+  .persoia-hint { font-size: 10.5px; color: var(--text3); margin-top: 6px; line-height: 1.4; }
+  .persoia-status { margin-bottom: 8px; }
+  .test-btn.persoia-logout { background: transparent; color: var(--text3); }
 
   .input-group { margin-bottom: 8px; }
   .input-label { font-size: 11px; color: var(--text3); margin-bottom: 4px; display: block; }
@@ -957,11 +965,20 @@
     <div class="sidebar-section">
       <div class="sidebar-label">Intelligence Artificielle</div>
       <div class="ai-provider-grid">
-        <button class="provider-btn active" data-provider="anthropic">Claude</button>
+        <button class="provider-btn persoia-btn active" data-provider="persoia" style="grid-column:1/-1">✨ persoIA — connexion simple</button>
+        <button class="provider-btn" data-provider="anthropic">Claude</button>
         <button class="provider-btn" data-provider="openai">OpenAI</button>
         <button class="provider-btn" data-provider="mistral">Mistral</button>
         <button class="provider-btn" data-provider="ollama">Ollama</button>
         <button class="provider-btn" data-provider="custom" style="grid-column:1/-1">Custom Endpoint</button>
+      </div>
+
+      <!-- persoIA : login navigateur, aucune clé à saisir -->
+      <div class="input-group" id="group-persoia">
+        <div class="persoia-status test-status" id="persoia-status">Vérification…</div>
+        <button class="test-btn" id="persoia-login-btn"><span>🔐 Se connecter à persoIA</span></button>
+        <button class="test-btn persoia-logout" id="persoia-logout-btn" style="display:none"><span>Se déconnecter</span></button>
+        <div class="persoia-hint">Une seule connexion, partagée avec vos autres outils persoIA.</div>
       </div>
 
       <div class="input-group" id="group-apikey">
@@ -1231,7 +1248,7 @@
 // ─── State ──────────────────────────────────────────────────────────────────
 let sources = [];
 let selectedSources = new Set();
-let currentProvider = 'anthropic';
+let currentProvider = 'persoia';
 let aiEnabled = true;
 let allResults = [];
 let aiAnalysis = null;
@@ -1275,12 +1292,12 @@ async function init() {
   // Load saved config
   const saved = loadConfig();
   if (saved) {
-    currentProvider = saved.provider || 'anthropic';
+    currentProvider = saved.provider || 'persoia';
     document.getElementById('api-key').value = saved.apiKey || '';
     document.getElementById('api-endpoint').value = saved.endpoint || '';
     document.getElementById('api-model').value = saved.model || '';
-    updateProviderUI();
   }
+  updateProviderUI(); // reflète le provider courant (persoIA par défaut)
 
   const [recentSearches, recentKeywords, recentConfigs] = await Promise.all([
     storeGet('recent-searches'),
@@ -1468,8 +1485,11 @@ function updateProviderUI() {
 
   const isCustom = currentProvider === 'custom';
   const isOllama = currentProvider === 'ollama';
-  document.getElementById('group-apikey').style.display = (isOllama) ? 'none' : 'block';
+  const isPersoia = currentProvider === 'persoia';
+  document.getElementById('group-persoia').style.display = isPersoia ? 'block' : 'none';
+  document.getElementById('group-apikey').style.display = (isOllama || isPersoia) ? 'none' : 'block';
   document.getElementById('group-endpoint').style.display = (isCustom || isOllama) ? 'block' : 'none';
+  if (isPersoia) refreshPersoiaStatus();
 
   const placeholders = {
     anthropic: 'sk-ant-...',
@@ -1483,7 +1503,8 @@ function updateProviderUI() {
     openai: 'gpt-4o',
     mistral: 'mistral-large-latest',
     ollama: 'llama3',
-    custom: 'model-name'
+    custom: 'model-name',
+    persoia: 'modèle par défaut persoIA'
   };
   const endpointPH = {
     ollama: 'http://localhost:11434/api/chat',
@@ -1552,6 +1573,47 @@ function getAIConfig() {
     model: document.getElementById('api-model').value.trim()
   };
 }
+
+// ─── persoIA : connexion partagée (login navigateur, aucune clé à saisir) ───────
+async function refreshPersoiaStatus() {
+  const el = document.getElementById('persoia-status');
+  const loginBtn = document.getElementById('persoia-login-btn');
+  const logoutBtn = document.getElementById('persoia-logout-btn');
+  if (!el) return;
+  let st;
+  try { st = await window.api.persoiaStatus(); } catch { st = null; }
+  if (st && st.connected) {
+    el.textContent = '✓ Connecté à persoIA' + (st.tenant ? ' — ' + st.tenant : '');
+    el.className = 'persoia-status test-status ok';
+    loginBtn.style.display = 'none';
+    logoutBtn.style.display = '';
+  } else {
+    el.textContent = 'Non connecté.';
+    el.className = 'persoia-status test-status';
+    loginBtn.style.display = '';
+    logoutBtn.style.display = 'none';
+  }
+}
+document.getElementById('persoia-login-btn').addEventListener('click', async () => {
+  const el = document.getElementById('persoia-status');
+  const btn = document.getElementById('persoia-login-btn');
+  btn.disabled = true;
+  el.textContent = 'Ouverture du navigateur… identifiez-vous puis revenez ici.';
+  el.className = 'persoia-status test-status';
+  let r;
+  try { r = await window.api.persoiaLogin(); } catch (e) { r = { ok: false, error: e.message }; }
+  btn.disabled = false;
+  if (r && r.connected) {
+    await refreshPersoiaStatus();
+  } else {
+    el.textContent = '✗ ' + (r && r.error ? r.error : 'Connexion annulée');
+    el.className = 'persoia-status test-status err';
+  }
+});
+document.getElementById('persoia-logout-btn').addEventListener('click', async () => {
+  try { await window.api.persoiaLogout(); } catch {}
+  await refreshPersoiaStatus();
+});
 
 // ─── Sources ──────────────────────────────────────────────────────────────────
 function renderSources() {
@@ -1688,7 +1750,7 @@ async function triggerSearch() {
   }
 
   const aiConfig = getAIConfig();
-  if (aiEnabled && !aiConfig.apiKey && currentProvider !== 'ollama') {
+  if (aiEnabled && !aiConfig.apiKey && currentProvider !== 'ollama' && currentProvider !== 'persoia') {
     document.getElementById('modal-overlay').classList.add('show');
     return;
   }
@@ -1866,6 +1928,10 @@ async function runSearch(filters, selected, aiConfig) {
         aiAnalysis = analysis.analysis;
         renderAIPanel(aiAnalysis);
         refreshResults();
+      } else if (analysis.error) {
+        document.getElementById('ai-summary').textContent = '⚠️ Analyse IA indisponible : ' + analysis.error;
+        document.getElementById('ai-rec').textContent = '';
+        document.getElementById('ai-panel').classList.add('visible');
       }
     } catch {}
     document.getElementById('search-btn').classList.remove('analyzing');

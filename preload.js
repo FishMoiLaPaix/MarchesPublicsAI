@@ -12,5 +12,8 @@ contextBridge.exposeInMainWorld('api', {
   getGeoReference: () => ipcRenderer.invoke('get-geo-reference'),
   checkUpdate: () => ipcRenderer.invoke('update-check'),
   applyUpdate: (sha) => ipcRenderer.invoke('update-apply', sha),
-  restartApp: () => ipcRenderer.invoke('update-restart')
+  restartApp: () => ipcRenderer.invoke('update-restart'),
+  persoiaStatus: () => ipcRenderer.invoke('persoia-status'),
+  persoiaLogin: () => ipcRenderer.invoke('persoia-login'),
+  persoiaLogout: () => ipcRenderer.invoke('persoia-logout')
 });

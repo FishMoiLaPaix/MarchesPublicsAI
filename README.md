@@ -13,11 +13,19 @@ Outil de recherche intelligente dans les marchés publics français et européen
 ## Providers IA supportés
 | Provider | Endpoint par défaut |
 |---|---|
+| **persoIA** ✨ (connexion simple) | chat.persoia.com/v1 |
 | **Claude (Anthropic)** | api.anthropic.com |
 | **OpenAI** (GPT-4o, etc.) | api.openai.com |
 | **Mistral AI** | api.mistral.ai |
 | **Ollama** (local) | localhost:11434 |
 | **Custom** | Votre endpoint OpenAI-compatible |
+
+### persoIA — connexion partagée
+Sélectionnez **persoIA** puis cliquez sur « Se connecter » : vous vous identifiez
+**une seule fois** dans le navigateur (aucune clé à copier-coller). La clé est
+stockée dans un emplacement commun à tous vos outils persoIA
+(`%APPDATA%\persoia\config.env`) et relue automatiquement. Authentification portée
+depuis [persoia-auth](https://github.com/FishMoiLaPaix/persoia-auth).
 
 ## Installation Windows
 
