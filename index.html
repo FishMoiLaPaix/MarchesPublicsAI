@@ -963,38 +963,20 @@
 
     <!-- AI Config -->
     <div class="sidebar-section">
-      <div class="sidebar-label">Intelligence Artificielle</div>
-      <div class="ai-provider-grid">
-        <button class="provider-btn persoia-btn active" data-provider="persoia" style="grid-column:1/-1">✨ persoIA — connexion simple</button>
-        <button class="provider-btn" data-provider="anthropic">Claude</button>
-        <button class="provider-btn" data-provider="openai">OpenAI</button>
-        <button class="provider-btn" data-provider="mistral">Mistral</button>
-        <button class="provider-btn" data-provider="ollama">Ollama</button>
-        <button class="provider-btn" data-provider="custom" style="grid-column:1/-1">Custom Endpoint</button>
-      </div>
+      <div class="sidebar-label">Intelligence Artificielle — persoIA</div>
 
       <!-- persoIA : login navigateur, aucune clé à saisir -->
       <div class="input-group" id="group-persoia">
         <div class="persoia-status test-status" id="persoia-status">Vérification…</div>
         <button class="test-btn" id="persoia-login-btn"><span>🔐 Se connecter à persoIA</span></button>
         <button class="test-btn persoia-logout" id="persoia-logout-btn" style="display:none"><span>Se déconnecter</span></button>
-        <div class="persoia-hint">Une seule connexion, partagée avec vos autres outils persoIA.</div>
+        <div class="persoia-hint">Connexion unique, partagée avec vos autres outils persoIA. Aucune clé à saisir : l'identification se fait dans le navigateur.</div>
       </div>
 
-      <div class="input-group" id="group-apikey">
-        <label class="input-label">Clé API</label>
-        <input type="password" class="input-field" id="api-key" placeholder="sk-ant-..." />
-      </div>
-
-      <div class="input-group" id="group-endpoint" style="display:none">
-        <label class="input-label">Endpoint URL</label>
-        <input type="text" class="input-field" id="api-endpoint" placeholder="https://api.exemple.com/v1/chat/completions" />
-      </div>
-
-      <div class="input-group">
-        <label class="input-label">Modèle (optionnel)</label>
-        <input type="text" class="input-field" id="api-model" placeholder="claude-opus-4-6" />
-      </div>
+      <!-- Champs hérités (anciens providers) — conservés masqués pour la compatibilité du code -->
+      <div class="input-group" id="group-apikey" style="display:none"><input type="password" class="input-field" id="api-key" /></div>
+      <div class="input-group" id="group-endpoint" style="display:none"><input type="text" class="input-field" id="api-endpoint" /></div>
+      <div class="input-group" id="group-model" style="display:none"><input type="text" class="input-field" id="api-model" /></div>
 
       <button class="test-btn" id="test-ai-btn">
         <div class="spinner" id="test-spinner"></div>
@@ -1289,15 +1271,9 @@ async function init() {
 
   loadGeoReference(); // charge le référentiel géo officiel (en cache après 1er lancement)
 
-  // Load saved config
-  const saved = loadConfig();
-  if (saved) {
-    currentProvider = saved.provider || 'persoia';
-    document.getElementById('api-key').value = saved.apiKey || '';
-    document.getElementById('api-endpoint').value = saved.endpoint || '';
-    document.getElementById('api-model').value = saved.model || '';
-  }
-  updateProviderUI(); // reflète le provider courant (persoIA par défaut)
+  // persoIA est le seul provider IA.
+  currentProvider = 'persoia';
+  updateProviderUI();
 
   const [recentSearches, recentKeywords, recentConfigs] = await Promise.all([
     storeGet('recent-searches'),
@@ -1319,6 +1295,22 @@ async function init() {
   setupTrashUI();
   setupUpdateUI();
   checkForUpdate();   // vérifie GitHub en tâche de fond
+  ensurePersoiaConfig(); // crée la config persoIA au 1er lancement (login navigateur)
+}
+
+// Au démarrage : si aucune configuration persoIA n'existe, on la crée en lançant
+// directement le login navigateur classique (le même que le bouton « Se connecter »).
+let persoiaAutoLoginDone = false;
+async function ensurePersoiaConfig() {
+  if (persoiaAutoLoginDone) return;
+  persoiaAutoLoginDone = true;
+  let st;
+  try { st = await window.api.persoiaStatus(); } catch { st = null; }
+  if (st && st.connected) { refreshPersoiaStatus(); return; }
+  const el = document.getElementById('persoia-status');
+  if (el) { el.textContent = 'Première connexion à persoIA — ouverture du navigateur…'; el.className = 'persoia-status test-status'; }
+  try { await window.api.persoiaLogin(); } catch {}
+  refreshPersoiaStatus();
 }
 
 // ─── Config persist ───────────────────────────────────────────────────────────
@@ -1434,6 +1426,9 @@ async function saveRecentConfig(cfg, name) {
 function renderRecentConfigs(list) {
   const section = document.getElementById('recent-cfg-section');
   const listEl = document.getElementById('recent-cfg-list');
+  // persoIA est le seul provider : la mémorisation de configs (clés API) est obsolète.
+  section.style.display = 'none';
+  return;
   if (!list || !list.length) { section.style.display = 'none'; return; }
   section.style.display = 'block';
   listEl.innerHTML = '';
@@ -1478,52 +1473,15 @@ async function deleteRecentConfig(cfg) {
 }
 
 // ─── Provider UI ─────────────────────────────────────────────────────────────
+// persoIA est désormais le seul provider : on masque les champs hérités.
 function updateProviderUI() {
-  document.querySelectorAll('.provider-btn').forEach(b => {
-    b.classList.toggle('active', b.dataset.provider === currentProvider);
-  });
-
-  const isCustom = currentProvider === 'custom';
-  const isOllama = currentProvider === 'ollama';
-  const isPersoia = currentProvider === 'persoia';
-  document.getElementById('group-persoia').style.display = isPersoia ? 'block' : 'none';
-  document.getElementById('group-apikey').style.display = (isOllama || isPersoia) ? 'none' : 'block';
-  document.getElementById('group-endpoint').style.display = (isCustom || isOllama) ? 'block' : 'none';
-  if (isPersoia) refreshPersoiaStatus();
-
-  const placeholders = {
-    anthropic: 'sk-ant-...',
-    openai: 'sk-...',
-    mistral: 'votre clé Mistral',
-    ollama: '',
-    custom: 'votre clé API'
-  };
-  const modelPH = {
-    anthropic: 'claude-opus-4-6',
-    openai: 'gpt-4o',
-    mistral: 'mistral-large-latest',
-    ollama: 'llama3',
-    custom: 'model-name',
-    persoia: 'modèle par défaut persoIA'
-  };
-  const endpointPH = {
-    ollama: 'http://localhost:11434/api/chat',
-    custom: 'https://api.exemple.com/v1/chat/completions'
-  };
-
-  document.getElementById('api-key').placeholder = placeholders[currentProvider] || '';
-  document.getElementById('api-model').placeholder = modelPH[currentProvider] || '';
-  if (endpointPH[currentProvider]) document.getElementById('api-endpoint').placeholder = endpointPH[currentProvider];
+  currentProvider = 'persoia';
+  document.getElementById('group-persoia').style.display = 'block';
+  document.getElementById('group-apikey').style.display = 'none';
+  document.getElementById('group-endpoint').style.display = 'none';
+  const gm = document.getElementById('group-model'); if (gm) gm.style.display = 'none';
+  refreshPersoiaStatus();
 }
-
-document.querySelectorAll('.provider-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    currentProvider = btn.dataset.provider;
-    updateProviderUI();
-    saveConfig();
-    updateSaveCfgRow();
-  });
-});
 
 ['api-key','api-endpoint','api-model'].forEach(id => {
   document.getElementById(id).addEventListener('input', () => { saveConfig(); updateSaveCfgRow(); });

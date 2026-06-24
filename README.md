@@ -10,22 +10,16 @@ Outil de recherche intelligente dans les marchés publics français et européen
 - **AchatPublic.com** — Agrégateur français
 - **Mégalis Bretagne** — Plateforme régionale
 
-## Providers IA supportés
-| Provider | Endpoint par défaut |
-|---|---|
-| **persoIA** ✨ (connexion simple) | chat.persoia.com/v1 |
-| **Claude (Anthropic)** | api.anthropic.com |
-| **OpenAI** (GPT-4o, etc.) | api.openai.com |
-| **Mistral AI** | api.mistral.ai |
-| **Ollama** (local) | localhost:11434 |
-| **Custom** | Votre endpoint OpenAI-compatible |
+## Intelligence Artificielle — persoIA
+L'application utilise **persoIA** comme unique fournisseur d'IA
+(`chat.persoia.com/v1`). Aucune clé à copier-coller : vous vous identifiez **une
+seule fois** dans le navigateur. La clé est stockée dans un emplacement commun à
+tous vos outils persoIA (`%APPDATA%\persoia\config.env`) et relue automatiquement.
 
-### persoIA — connexion partagée
-Sélectionnez **persoIA** puis cliquez sur « Se connecter » : vous vous identifiez
-**une seule fois** dans le navigateur (aucune clé à copier-coller). La clé est
-stockée dans un emplacement commun à tous vos outils persoIA
-(`%APPDATA%\persoia\config.env`) et relue automatiquement. Authentification portée
-depuis [persoia-auth](https://github.com/FishMoiLaPaix/persoia-auth).
+Au **premier lancement**, si aucune configuration persoIA n'existe encore,
+l'application ouvre directement le login navigateur pour la créer. Vous pouvez
+ensuite vous reconnecter / déconnecter depuis le panneau latéral. Authentification
+portée depuis [persoia-auth](https://github.com/FishMoiLaPaix/persoia-auth).
 
 ## Installation Windows
 
@@ -44,10 +38,10 @@ npx electron .
 ```
 
 ## Configuration IA
-1. Sélectionner le provider (Claude, OpenAI, Mistral, Ollama, Custom)
-2. Entrer la clé API
-3. Cliquer "Tester la connexion" pour vérifier
-4. La config est sauvegardée localement
+1. Au premier lancement, identifiez-vous dans le navigateur (login persoIA) — la
+   configuration est créée automatiquement
+2. Cliquer "Tester la connexion" pour vérifier
+3. La connexion est partagée avec vos autres outils persoIA
 
 ## Utilisation
 1. Saisir votre recherche (ex: "développement d'une application mobile", "travaux de rénovation")
