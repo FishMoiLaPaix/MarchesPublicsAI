@@ -70,7 +70,7 @@ ipcMain.handle('store-set', (event, key, value) => { loadStore()[key] = value; s
 // package.json) chargés directement depuis le dossier d'installation. Mettre à
 // jour = comparer le dernier commit publié sur GitHub au commit déjà appliqué,
 // puis retélécharger ces fichiers et relancer l'app.
-const UPDATE_REPO = 'Renan-projects/MarchesPublicsAI';
+const UPDATE_REPO = 'FishMoiLaPaix/MarchesPublicsAI';
 const UPDATE_BRANCH = 'main';
 const UPDATE_FILES = ['main.js', 'preload.js', 'index.html', 'package.json'];
 
