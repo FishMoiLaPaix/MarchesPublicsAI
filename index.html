@@ -545,6 +545,17 @@
   .result-card.pending-delete { opacity: 0.5; border-color: #f44336; background: rgba(244,67,54,0.06); }
   .result-card.pending-delete .card-trash { opacity: 1; color: #f44336; }
 
+  /* Offre marquée comme lue : grisée mais conservée */
+  .result-card.read { opacity: 0.5; background: rgba(255,255,255,0.015); }
+  .result-card.read:hover { opacity: 0.85; }
+  .card-read {
+    display: inline-flex; align-items: center; gap: 4px; cursor: pointer;
+    font-size: 11px; color: var(--text3); user-select: none; white-space: nowrap;
+  }
+  .card-read input { cursor: pointer; margin: 0; }
+  .card-read:hover { color: var(--blue); }
+  .result-card.read .card-read { color: var(--blue); }
+
   .trash-open-btn {
     display: inline-flex; align-items: center; gap: 5px;
     padding: 4px 11px; margin-left: 10px;
@@ -1052,6 +1063,8 @@
           <option value="TRAVAUX">Travaux</option>
         </select>
 
+        <input type="text" class="f-text" id="f-prestation" placeholder="🧰 Prestation (mots-clés séparés par ;)" title="Filtrer les services par prestation — mots-clés séparés par ;" style="display:none" />
+
         <select class="f-select" id="f-famille" title="Type de marché public">
           <option value="">Type de marché : tous</option>
           <option value="Marchés européens">Marchés européens</option>
@@ -1238,6 +1251,7 @@ let processedResults = []; // résultats filtrés + triés (cache du dernier ren
 
 // Corbeille / suppression d'offres
 let hiddenOffers = new Set();    // clés des offres masquées (blacklist persistante)
+let readOffers = new Set();      // clés des offres marquées « lues » (grisées, conservées)
 let trashOffers = [];            // offres présentes dans la corbeille (visibles, restaurables)
 let pendingDelete = new Map();   // clé -> offre, marquées mais pas encore validées
 let pendingUpdateSha = null;     // commit GitHub à appliquer si mise à jour dispo
@@ -1279,9 +1293,10 @@ async function init() {
   updateSaveCfgRow();
 
   // Corbeille : restaure la blacklist + le contenu de la corbeille
-  const [hidden, trash] = await Promise.all([storeGet('hidden-offers'), storeGet('trash-offers')]);
+  const [hidden, trash, read] = await Promise.all([storeGet('hidden-offers'), storeGet('trash-offers'), storeGet('read-offers')]);
   hiddenOffers = new Set(Array.isArray(hidden) ? hidden : []);
   trashOffers = Array.isArray(trash) ? trash : [];
+  readOffers = new Set(Array.isArray(read) ? read : []);
   updateTrashCount();
 
   setupTrashUI();
@@ -1689,6 +1704,7 @@ function saveFilterState() {
     mode: keywordMode,
     secteur: document.getElementById('f-secteur').value,
     lieu: document.getElementById('f-lieu').value,
+    prestation: document.getElementById('f-prestation').value,
     facets: { ...facets },
     pub: { ...dateState.pub },
     close: { ...dateState.close },
@@ -1714,6 +1730,8 @@ async function restoreFilterState() {
     el.value = facets[key] || '';
     el.classList.toggle('active', !!facets[key]);
   });
+  document.getElementById('f-prestation').value = st.prestation || '';
+  updatePrestationVisibility();
 
   dateState.pub = { from: (st.pub && st.pub.from) || null, to: (st.pub && st.pub.to) || null };
   dateState.close = { from: (st.close && st.close.from) || null, to: (st.close && st.close.to) || null };
@@ -1738,7 +1756,7 @@ async function restoreFilterState() {
   updateFiltersCount();
 
   // Ouvre la barre de filtres si des critères avancés étaient renseignés.
-  const advanced = !!(st.secteur || st.lieu || Object.values(facets).some(Boolean)
+  const advanced = !!(st.secteur || st.lieu || st.prestation || Object.values(facets).some(Boolean)
     || dateState.pub.from || dateState.pub.to || dateState.close.from || dateState.close.to);
   if (advanced) {
     document.getElementById('fbar').classList.add('show');
@@ -1907,11 +1925,27 @@ Object.entries(FACET_SELECTS).forEach(([id, key]) => {
     facets[key] = el.value;
     el.classList.toggle('active', !!el.value);
     currentPage = 1;
+    if (id === 'f-domaine') updatePrestationVisibility();
     updateFiltersCount();
     if (lastFilters) triggerSearch(); // re-fetch (filtre serveur BOAMP)
   });
 });
 ['f-keywords', 'f-secteur', 'f-lieu'].forEach(id => document.getElementById(id).addEventListener('input', updateFiltersCount));
+
+// Champ "Prestation" : visible uniquement en domaine Services. Filtrage 100 % client.
+function updatePrestationVisibility() {
+  const el = document.getElementById('f-prestation');
+  const show = facets.typeMarche === 'SERVICES';
+  el.style.display = show ? '' : 'none';
+  el.classList.toggle('active', show && !!el.value.trim());
+}
+document.getElementById('f-prestation').addEventListener('input', () => {
+  const el = document.getElementById('f-prestation');
+  el.classList.toggle('active', !!el.value.trim());
+  currentPage = 1;
+  updateFiltersCount();
+  refreshResults(); // affinage sur les résultats déjà récupérés
+});
 
 // ─── Bulles de dates (publication + clôture) ────────────────────────────────────
 function fmtDateShort(iso) { const [y, m, d] = iso.split('-'); return `${d}/${m}/${y.slice(2)}`; }
@@ -1968,6 +2002,7 @@ function updateFiltersCount() {
   let n = 0;
   if (document.getElementById('f-secteur').value.trim()) n++;
   if (document.getElementById('f-lieu').value.trim()) n++;
+  if (facets.typeMarche === 'SERVICES' && document.getElementById('f-prestation').value.trim()) n++;
   Object.values(facets).forEach(v => { if (v) n++; });
   if (dateState.pub.from || dateState.pub.to) n++;
   if (dateState.close.from || dateState.close.to) n++;
@@ -2237,6 +2272,22 @@ function getProcessedResults() {
     if (kept.length > 0) list = kept;
   }
 
+  // Filtre "prestation" (mots-clés manuels séparés par ;) — uniquement en domaine
+  // Services. C'est un affinage explicite : on filtre strictement (pas de garde-fou).
+  const presEl = document.getElementById('f-prestation');
+  if (facets.typeMarche === 'SERVICES' && presEl && presEl.value.trim()) {
+    const terms = presEl.value.split(';').map(t => norm(t).trim()).filter(Boolean);
+    if (terms.length) {
+      list = list.filter(r => {
+        const text = norm((r.title || '') + ' ' + (r.desc || ''));
+        return terms.some(t => text.includes(t));
+      });
+    }
+  }
+
+  // On n'affiche jamais les résultats sans aucune correspondance (score à 0 %).
+  list = list.filter(r => (r._rel?.score ?? r._score) > 0);
+
   list.sort((a, b) => (b._score - a._score) || (b._matched - a._matched));
   return list;
 }
@@ -2326,7 +2377,8 @@ function renderResults() {
 function makeCard(result, highlighted) {
   const card = document.createElement('div');
   const key = offerKey(result);
-  card.className = 'result-card' + (highlighted ? ' highlighted' : '') + (pendingDelete.has(key) ? ' pending-delete' : '');
+  const isRead = readOffers.has(key);
+  card.className = 'result-card' + (highlighted ? ' highlighted' : '') + (pendingDelete.has(key) ? ' pending-delete' : '') + (isRead ? ' read' : '');
 
   const score = result._rel?.score ?? result._score;
   const scoreColor = score >= 80 ? '#00e676' : score >= 60 ? '#4a9eff' : '#ff9800';
@@ -2352,6 +2404,9 @@ function makeCard(result, highlighted) {
     <div class="card-footer">
       <span class="card-date">${result.date ? '📅 ' + result.date : ''}${result.datelimite ? '   ⏰ clôture ' + result.datelimite : ''}${result.procedure ? '   · ' + escHtml(result.procedure) : ''}</span>
       <div class="card-actions">
+        <label class="card-read" title="Marquer comme lu (grise l'offre sans la supprimer)">
+          <input type="checkbox" ${isRead ? 'checked' : ''} /> Lu
+        </label>
         <button class="card-trash" title="Supprimer cette offre">${pendingDelete.has(key) ? '✓ marquée' : '🗑'}</button>
         <a class="card-link" href="#">Ouvrir →</a>
       </div>
@@ -2365,6 +2420,12 @@ function makeCard(result, highlighted) {
   card.querySelector('.card-trash')?.addEventListener('click', (e) => {
     e.stopPropagation();
     togglePending(result);
+  });
+  const readLabel = card.querySelector('.card-read');
+  readLabel?.addEventListener('click', (e) => e.stopPropagation());
+  readLabel?.querySelector('input')?.addEventListener('change', (e) => {
+    e.stopPropagation();
+    toggleRead(result);
   });
   card.addEventListener('click', () => { if (result.url) window.api.openUrl(result.url); });
 
@@ -2391,6 +2452,15 @@ function togglePending(result) {
   else pendingDelete.set(key, result);
   updateDeleteBar();
   renderResults(); // reflète l'état "marquée" sur la page courante
+}
+
+// Marque / démarque une offre comme « lue » : elle est grisée mais reste affichée.
+async function toggleRead(result) {
+  const key = offerKey(result);
+  if (readOffers.has(key)) readOffers.delete(key);
+  else readOffers.add(key);
+  await storeSet('read-offers', [...readOffers]);
+  renderResults(); // applique l'état grisé sur la page courante
 }
 
 function updateDeleteBar() {
