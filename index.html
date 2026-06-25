@@ -1270,6 +1270,7 @@ let currentPage = 1;
 let processedResults = []; // résultats filtrés + triés (cache du dernier rendu)
 let irrelevantResults = []; // résultats jugés non pertinents (cachés par défaut)
 let showIrrelevant = false;  // affiche-t-on les non pertinents ?
+let searchRunId = 0;         // jeton de recherche : invalide une analyse IA obsolète
 
 // Corbeille / suppression d'offres
 let hiddenOffers = new Set();    // clés des offres masquées (blacklist persistante)
@@ -1819,6 +1820,7 @@ async function runSearch(filters, selected, aiConfig) {
   sourceOffsets = {};
   sourceTotals = {};
   showIrrelevant = false; // chaque nouvelle recherche repart sur "pertinents seulement"
+  const myRun = ++searchRunId; // invalide toute analyse IA en cours d'une recherche précédente
   document.getElementById('load-more-wrap').style.display = 'none';
 
   // UI
@@ -1899,27 +1901,67 @@ async function runSearch(filters, selected, aiConfig) {
   spinner.classList.remove('show');
   document.getElementById('search-btn-text').textContent = 'Rechercher';
   searchBtn.disabled = false;
+  searchBtn.classList.remove('analyzing'); // au cas où une analyse précédente serait restée
   document.getElementById('progress-wrap').classList.remove('visible');
 
   // 2) Analyse IA en arrière-plan : ré-affine et ré-affiche quand c'est prêt.
+  // (filters.text = requête combinée ; l'ancien code utilisait `query` non défini,
+  // ce qui levait une ReferenceError silencieuse et empêchait toute analyse IA.)
   if (aiEnabled && allResults.length > 0) {
-    document.getElementById('search-btn').classList.add('analyzing');
-    document.getElementById('search-btn-text').textContent = 'Analyse IA…';
-    try {
-      const analysis = await window.api.analyzeWithAI({ aiConfig, query, results: allResults });
-      if (analysis.success) {
-        aiAnalysis = analysis.analysis;
-        renderAIPanel(aiAnalysis);
-        refreshResults();
-      } else if (analysis.error) {
-        document.getElementById('ai-summary').textContent = '⚠️ Analyse IA indisponible : ' + analysis.error;
-        document.getElementById('ai-rec').textContent = '';
-        document.getElementById('ai-panel').classList.add('visible');
-      }
-    } catch {}
-    document.getElementById('search-btn').classList.remove('analyzing');
-    document.getElementById('search-btn-text').textContent = 'Rechercher';
+    await runAIAnalysis(aiConfig, filters.text, myRun);
   }
+}
+
+// ─── Analyse IA (étage 2) avec relance auto si l'instance GPU démarre (503) ──────
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+// Affiche un message dans le panneau IA (état d'attente ou erreur), sans résultat.
+function showAINotice(text) {
+  document.getElementById('ai-summary').textContent = text;
+  document.getElementById('ai-rec').textContent = '';
+  document.getElementById('ai-panel').classList.add('visible');
+}
+
+async function runAIAnalysis(aiConfig, query, myRun) {
+  const searchBtn = document.getElementById('search-btn');
+  searchBtn.classList.add('analyzing');
+  document.getElementById('search-btn-text').textContent = 'Analyse IA…';
+
+  const MAX_ATTEMPTS = 4;      // 1 essai + jusqu'à 3 relances
+  const RETRY_DELAY_MS = 40000; // ~40 s (démarrage d'une instance GPU ≈ 2 min)
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    let analysis;
+    try { analysis = await window.api.analyzeWithAI({ aiConfig, query, results: allResults }); }
+    catch (e) { analysis = { success: false, error: (e && e.message) || 'Erreur réseau' }; }
+
+    if (myRun !== searchRunId) return; // une nouvelle recherche a démarré : on abandonne
+
+    if (analysis.success) {
+      aiAnalysis = analysis.analysis;
+      renderAIPanel(aiAnalysis);
+      refreshResults();
+      break;
+    }
+
+    // 503 = instance GPU en démarrage → message honnête + relance automatique.
+    if (analysis.retryable && attempt < MAX_ATTEMPTS) {
+      showAINotice(`⏳ Instance IA (GPU) en démarrage (~2 min)… relance automatique ${attempt}/${MAX_ATTEMPTS - 1} dans ${Math.round(RETRY_DELAY_MS / 1000)} s.`);
+      await sleep(RETRY_DELAY_MS);
+      if (myRun !== searchRunId) return;
+      continue;
+    }
+
+    // Échec définitif.
+    showAINotice(analysis.retryable
+      ? '⏳ L\'instance IA (GPU) met trop de temps à démarrer. Relancez la recherche dans 1–2 min pour obtenir l\'analyse.'
+      : '⚠️ Analyse IA indisponible : ' + (analysis.error || 'erreur inconnue'));
+    break;
+  }
+
+  if (myRun !== searchRunId) return;
+  searchBtn.classList.remove('analyzing');
+  document.getElementById('search-btn-text').textContent = 'Rechercher';
 }
 
 // ─── Load more ───────────────────────────────────────────────────────────────

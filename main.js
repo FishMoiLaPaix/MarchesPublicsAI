@@ -948,6 +948,17 @@ async function callAI(config, systemPrompt, userPrompt) {
       let data = '';
       res.on('data', c => data += c);
       res.on('end', () => {
+        // Vérifie d'abord le code HTTP : un 5xx/4xx ne doit jamais être servi comme
+        // une complétion valide (même si son corps contenait un champ "choices").
+        if (res.statusCode >= 400) {
+          let msg = `HTTP ${res.statusCode}`;
+          try { const j = JSON.parse(data); msg = j.error?.message || j.detail || msg; } catch {}
+          const err = new Error(res.statusCode === 503
+            ? 'Instance persoIA (GPU) en démarrage, réessayez dans ~2 min.'
+            : msg);
+          err.status = res.statusCode;
+          return reject(err);
+        }
         try {
           const json = JSON.parse(data);
           if (json.error) reject(new Error(json.error.message || JSON.stringify(json.error)));
@@ -1039,17 +1050,22 @@ ${results.map((r, i) => `[${i}] ${r.sourceName}
 
 Réponds uniquement en JSON valide.`;
 
+  // `response` est déclaré AVANT le try pour rester visible dans le catch (sinon
+  // `response?.match` y lève une ReferenceError et masque la vraie erreur).
+  let response;
   try {
-    const response = await callAI(aiConfig, systemPrompt, userPrompt);
+    response = await callAI(aiConfig, systemPrompt, userPrompt);
     const clean = response.replace(/```json|```/g, '').trim();
     return { success: true, analysis: JSON.parse(clean) };
   } catch (e) {
-    // Si le JSON parse échoue, retourner le texte brut
+    // JSON invalide mais réponse présente → tente d'extraire le bloc {...}.
     try {
       const match = response?.match(/\{[\s\S]*\}/);
       if (match) return { success: true, analysis: JSON.parse(match[0]) };
     } catch {}
-    return { success: false, error: e.message, rawResponse: '' };
+    // status/retryable permettent à l'UI d'afficher un message d'attente honnête
+    // (503 = instance GPU en démarrage) et de relancer l'analyse automatiquement.
+    return { success: false, error: e.message, status: e.status || null, retryable: e.status === 503 };
   }
 });
 
@@ -1060,6 +1076,6 @@ ipcMain.handle('test-ai', async (_, aiConfig) => {
     const result = await callAI(aiConfig, 'Tu es un assistant.', 'Réponds juste "OK" pour confirmer que la connexion fonctionne.');
     return { success: true, message: result };
   } catch (e) {
-    return { success: false, error: e.message };
+    return { success: false, error: e.message, status: e.status || null };
   }
 });
