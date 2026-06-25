@@ -7,6 +7,16 @@ const fs = require('fs');
 const os = require('os');
 const crypto = require('crypto');
 
+// Identité d'application Windows (AppUserModelID). Indispensable pour que la barre
+// des tâches regroupe/épingle l'app sous SA propre icône et non sous celle
+// d'electron.exe (le lanceur). Doit correspondre à l'AUMID posée sur le raccourci
+// par l'installeur (INSTALLER.ps1) pour que l'épinglage utilise la bonne icône.
+const APP_USER_MODEL_ID = 'com.marchespublics.ai';
+if (process.platform === 'win32') app.setAppUserModelId(APP_USER_MODEL_ID);
+
+// Icône de fenêtre : .ico natif sur Windows (rendu net en barre des tâches).
+const APP_ICON = path.join(__dirname, 'assets', process.platform === 'win32' ? 'icon.ico' : 'icon.png');
+
 let mainWindow;
 
 function createWindow() {
@@ -15,7 +25,7 @@ function createWindow() {
     height: 820,
     minWidth: 900,
     minHeight: 600,
-    icon: path.join(__dirname, 'assets', 'icon.png'),
+    icon: APP_ICON,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,

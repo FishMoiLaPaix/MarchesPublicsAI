@@ -140,19 +140,98 @@ Start-Process $ElectronExe -ArgumentList $AppDir -WorkingDirectory $AppDir
 Set-Content "$AppDir\launch.ps1" $launchContent -Encoding UTF8
 Write-Host "  OK Lanceur avec synchro automatique cree" -ForegroundColor Green
 
-# -- 8. Raccourci Bureau --
-$WShell = New-Object -ComObject WScript.Shell
-$Desktop = $WShell.SpecialFolders("Desktop")
-$DesktopShortcut = "$Desktop\MarchesPublics AI.lnk"
-$SC = $WShell.CreateShortcut($DesktopShortcut)
-$SC.TargetPath = "powershell.exe"
-$SC.Arguments = "-WindowStyle Hidden -ExecutionPolicy Bypass -File `"$AppDir\launch.ps1`""
-$SC.WorkingDirectory = $AppDir
-$SC.Description = "MarchesPublics AI"
+# -- 8. Raccourcis (Bureau + Menu Demarrer) avec AppUserModelID --
+# L'AppUserModelID (identique a APP_USER_MODEL_ID dans main.js) permet a Windows
+# d'epingler l'app sous SA propre icone (icon.ico) et non sous celle d'electron.exe
+# (le lanceur reel). WScript.Shell ne sait pas poser l'AUMID, donc on cree le
+# raccourci via IShellLink + IPropertyStore (PROPVARIANT construite a la main).
+$AppId = "com.marchespublics.ai"
 $IconPath = "$AppDir\assets\icon.ico"
-if (Test-Path $IconPath) { $SC.IconLocation = "$IconPath,0" }
-$SC.Save()
-Write-Host "  OK Raccourci Bureau mis a jour" -ForegroundColor Green
+$LaunchArgs = "-WindowStyle Hidden -ExecutionPolicy Bypass -File `"$AppDir\launch.ps1`""
+
+$shortcutCs = @'
+using System;
+using System.Runtime.InteropServices;
+namespace MpaShortcut {
+  [StructLayout(LayoutKind.Sequential)] public struct PROPERTYKEY { public Guid fmtid; public uint pid; }
+  [ComImport, Guid("000214F9-0000-0000-C000-000000000046"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+  public interface IShellLinkW {
+    void GetPath([Out, MarshalAs(UnmanagedType.LPWStr)] System.Text.StringBuilder f, int c, IntPtr fd, uint fl);
+    void GetIDList(out IntPtr ppidl); void SetIDList(IntPtr pidl);
+    void GetDescription([Out, MarshalAs(UnmanagedType.LPWStr)] System.Text.StringBuilder s, int c);
+    void SetDescription([MarshalAs(UnmanagedType.LPWStr)] string s);
+    void GetWorkingDirectory([Out, MarshalAs(UnmanagedType.LPWStr)] System.Text.StringBuilder d, int c);
+    void SetWorkingDirectory([MarshalAs(UnmanagedType.LPWStr)] string d);
+    void GetArguments([Out, MarshalAs(UnmanagedType.LPWStr)] System.Text.StringBuilder a, int c);
+    void SetArguments([MarshalAs(UnmanagedType.LPWStr)] string a);
+    void GetHotkey(out short h); void SetHotkey(short h);
+    void GetShowCmd(out int c); void SetShowCmd(int c);
+    void GetIconLocation([Out, MarshalAs(UnmanagedType.LPWStr)] System.Text.StringBuilder i, int c, out int idx);
+    void SetIconLocation([MarshalAs(UnmanagedType.LPWStr)] string i, int idx);
+    void SetRelativePath([MarshalAs(UnmanagedType.LPWStr)] string p, uint r);
+    void Resolve(IntPtr hwnd, uint f); void SetPath([MarshalAs(UnmanagedType.LPWStr)] string p);
+  }
+  [ComImport, Guid("0000010b-0000-0000-C000-000000000046"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+  public interface IPersistFile { void GetClassID(out Guid c); [PreserveSig] int IsDirty();
+    void Load([MarshalAs(UnmanagedType.LPWStr)] string f, uint m);
+    void Save([MarshalAs(UnmanagedType.LPWStr)] string f, [MarshalAs(UnmanagedType.Bool)] bool r);
+    void SaveCompleted([MarshalAs(UnmanagedType.LPWStr)] string f); void GetCurFile([MarshalAs(UnmanagedType.LPWStr)] out string f); }
+  [ComImport, Guid("886d8eeb-8cf2-4446-8d02-cdba1dbdcf99"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+  public interface IPropertyStore { void GetCount(out uint c); void GetAt(uint i, out PROPERTYKEY k);
+    void GetValue(ref PROPERTYKEY k, IntPtr pv); void SetValue(ref PROPERTYKEY k, IntPtr pv); void Commit(); }
+  [ComImport, Guid("00021401-0000-0000-C000-000000000046")] public class CShellLink { }
+  public static class Maker {
+    static PROPERTYKEY AUMID = new PROPERTYKEY { fmtid = new Guid("9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3"), pid = 5 };
+    public static void Create(string lnk, string target, string args, string workDir, string desc, string iconPath, int iconIdx, string appId) {
+      var o = new CShellLink(); var sl = (IShellLinkW)o;
+      sl.SetPath(target);
+      if (args != null) sl.SetArguments(args);
+      if (workDir != null) sl.SetWorkingDirectory(workDir);
+      if (desc != null) sl.SetDescription(desc);
+      if (iconPath != null) sl.SetIconLocation(iconPath, iconIdx);
+      if (appId != null) {
+        IntPtr pv = Marshal.AllocCoTaskMem(16);
+        for (int i = 0; i < 16; i++) Marshal.WriteByte(pv, i, 0);
+        Marshal.WriteInt16(pv, 0, 31);
+        Marshal.WriteIntPtr(pv, 8, Marshal.StringToCoTaskMemUni(appId));
+        var ps = (IPropertyStore)o; var k = AUMID; ps.SetValue(ref k, pv); ps.Commit();
+      }
+      ((IPersistFile)o).Save(lnk, true);
+      Marshal.ReleaseComObject(o);
+    }
+  }
+}
+'@
+$haveMaker = $false
+try { Add-Type -TypeDefinition $shortcutCs -Language CSharp -ErrorAction Stop; $haveMaker = $true } catch { $haveMaker = $false }
+
+function New-MpaShortcut($Path) {
+    $done = $false
+    if ($haveMaker) {
+        try {
+            $icon = if (Test-Path $IconPath) { $IconPath } else { $null }
+            [MpaShortcut.Maker]::Create($Path, "powershell.exe", $LaunchArgs, $AppDir, "MarchesPublics AI", $icon, 0, $AppId)
+            $done = $true
+        } catch { $done = $false }
+    }
+    if (-not $done) {
+        # Repli : raccourci classique sans AUMID (l'icone d'epinglage peut alors etre celle d'Electron)
+        $w = New-Object -ComObject WScript.Shell
+        $s = $w.CreateShortcut($Path)
+        $s.TargetPath = "powershell.exe"
+        $s.Arguments = $LaunchArgs
+        $s.WorkingDirectory = $AppDir
+        $s.Description = "MarchesPublics AI"
+        if (Test-Path $IconPath) { $s.IconLocation = "$IconPath,0" }
+        $s.Save()
+    }
+}
+
+$Desktop = (New-Object -ComObject WScript.Shell).SpecialFolders("Desktop")
+New-MpaShortcut "$Desktop\MarchesPublics AI.lnk"
+$StartMenu = [Environment]::GetFolderPath('Programs')
+New-MpaShortcut "$StartMenu\MarchesPublics AI.lnk"
+Write-Host "  OK Raccourcis Bureau + Menu Demarrer crees" -ForegroundColor Green
 
 # -- 9. Lancer --
 Write-Host ""

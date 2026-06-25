@@ -32,13 +32,18 @@ if ($processes) {
     Write-Host "  OK Application fermee" -ForegroundColor Green
 }
 
-# -- Raccourci Bureau --
+# -- Raccourcis (Bureau + Menu Demarrer) --
 $WShell = New-Object -ComObject WScript.Shell
 $Desktop = $WShell.SpecialFolders("Desktop")
-$Shortcut = "$Desktop\MarchesPublics AI.lnk"
-if (Test-Path $Shortcut) {
-    Remove-Item $Shortcut -Force
-    Write-Host "  OK Raccourci Bureau supprime" -ForegroundColor Green
+$shortcuts = @(
+    "$Desktop\MarchesPublics AI.lnk",
+    "$([Environment]::GetFolderPath('Programs'))\MarchesPublics AI.lnk"
+)
+foreach ($Shortcut in $shortcuts) {
+    if (Test-Path $Shortcut) {
+        Remove-Item $Shortcut -Force
+        Write-Host "  OK Raccourci supprime : $Shortcut" -ForegroundColor Green
+    }
 }
 
 # -- Dossier app (electron-bin + node_modules + fichiers) --
