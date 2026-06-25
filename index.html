@@ -1082,7 +1082,7 @@
           <option value="TRAVAUX">Travaux</option>
         </select>
 
-        <input type="text" class="f-text" id="f-prestation" placeholder="🧰 Prestation (mots-clés séparés par ;)" title="Filtrer les services par prestation — mots-clés séparés par ;" style="display:none" />
+        <input type="text" class="f-text" id="f-prestation" placeholder="🧰 Prestations (ex: nettoyage de locaux ; gardiennage)" title="Filtrer par prestation de service. Plusieurs prestations séparées par ; — une offre est gardée si elle correspond à l'une d'elles (tous les mots du libellé présents, pluriel/ordre indifférents)." style="display:none" />
 
         <select class="f-select" id="f-famille" title="Type de marché public">
           <option value="">Type de marché : tous</option>
@@ -2302,16 +2302,26 @@ function getProcessedResults() {
     if (inZone.length > 0) list = inZone;
   }
 
-  // Filtre "prestation" (mots-clés manuels séparés par ;) — uniquement en domaine
-  // Services. C'est un affinage explicite "dur" : on filtre strictement (pas de
-  // garde-fou) AVANT le partage pertinent / non pertinent.
+  // Filtre "prestation" — uniquement en domaine Services. Une PRESTATION est une
+  // activité de service désignée par un libellé (ex. « nettoyage de locaux »,
+  // « entretien des espaces verts »), pas un simple mot-clé. Dans les annonces le
+  // libellé varie (pluriel, mots de liaison, ordre), donc on n'exige PAS la
+  // sous-chaîne exacte : une offre correspond à une prestation si TOUS ses mots
+  // significatifs sont présents (ET interne, pluriel/racine tolérés). On garde
+  // l'offre si elle correspond à AU MOINS UNE prestation listée (OU entre les ;).
+  // Filtre "dur" appliqué AVANT le partage pertinent / non pertinent.
   const presEl = document.getElementById('f-prestation');
   if (facets.typeMarche === 'SERVICES' && presEl && presEl.value.trim()) {
-    const terms = presEl.value.split(';').map(t => norm(t).trim()).filter(Boolean);
-    if (terms.length) {
+    const PRESTA_IGNORE = new Set([...STOPWORDS, 'prestation', 'prestations']);
+    const prestations = presEl.value.split(';')
+      .map(p => normWords(p).filter(w => w.length >= 3 && !PRESTA_IGNORE.has(w)))
+      .filter(words => words.length > 0);
+    if (prestations.length) {
       list = list.filter(r => {
         const text = norm((r.title || '') + ' ' + (r.desc || ''));
-        return terms.some(t => text.includes(t));
+        const stems = new Set(text.split(/[^a-z0-9]+/).filter(Boolean).map(stemWord));
+        const wordMatch = (w) => text.includes(w) || stems.has(w) || stems.has(stemWord(w));
+        return prestations.some(words => words.every(wordMatch));
       });
     }
   }
