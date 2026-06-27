@@ -1,0 +1,16 @@
+{
+  "$comment": "Manifeste de l'addon PersoIA. SEULE source de vérité pour l'identité de l'outil. Modifié par scripts/init-addon.sh lors du clonage du squelette.",
+  "name": "marches-publics-ai",
+  "displayName": "MarchésPublics AI",
+  "description": "Recherche intelligente dans les marchés publics français et européens (scoring IA).",
+  "clientId": "marchespublicsai",
+  "appId": "com.persoia.marchespublics",
+  "updateRepo": "FishMoiLaPaix/MarchesPublicsAI",
+  "platforms": [
+    "web",
+    "pwa",
+    "electron",
+    "android",
+    "ios"
+  ]
+}

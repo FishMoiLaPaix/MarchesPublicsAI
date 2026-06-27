@@ -1,0 +1,27 @@
+# Dépendances et build
+node_modules/
+dist/
+.quasar/
+*.log
+
+# Secrets — NE JAMAIS committer
+.env
+.env.*
+config.env
+CONTEXT.md
+
+# Capacitor : projets natifs générés (régénérés via `quasar mode add capacitor`)
+src-capacitor/node_modules/
+src-capacitor/android/
+src-capacitor/ios/
+
+# Electron : les icônes natives (icns/ico) sont COMMITÉES pour que le build
+# desktop fonctionne dès le clone. Régénérez-les via scripts/gen-icons.sh.
+
+# OS / IDE
+.DS_Store
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln

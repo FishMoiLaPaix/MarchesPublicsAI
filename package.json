@@ -1,34 +1,65 @@
 {
   "name": "marches-publics-ai",
-  "version": "1.0.0",
-  "description": "Recherche intelligente dans les marchés publics",
-  "main": "main.js",
+  "version": "0.1.0",
+  "description": "Recherche intelligente dans les marchés publics français et européens (scoring IA).",
+  "productName": "MarchésPublics AI",
+  "author": "FishMoiLaPaix",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
   "scripts": {
-    "start": "electron .",
-    "build": "electron-builder --win --x64"
-  },
-  "build": {
-    "appId": "com.marchespublics.ai",
-    "productName": "MarchésPublics AI",
-    "directories": {
-      "output": "dist"
-    },
-    "win": {
-      "target": "portable",
-      "icon": "assets/icon.ico"
-    },
-    "files": [
-      "**/*",
-      "!dist/**",
-      "!node_modules/electron-builder/**"
-    ]
-  },
-  "devDependencies": {
-    "electron": "^36.3.1",
-    "electron-builder": "^26.0.12"
+    "dev": "quasar dev",
+    "build": "quasar build",
+    "build:pwa": "quasar build -m pwa",
+    "build:electron": "quasar build -m electron",
+    "build:capacitor:android": "quasar build -m capacitor -T android",
+    "build:capacitor:ios": "quasar build -m capacitor -T ios",
+    "lint": "eslint .",
+    "format": "prettier --write \"**/*.{js,ts,vue,scss,html,md,json}\" --ignore-path .gitignore",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "init-addon": "bash scripts/init-addon.sh"
   },
   "dependencies": {
+    "@quasar/extras": "^2.0.1",
     "axios": "^1.9.0",
-    "cheerio": "^1.0.0"
+    "cheerio": "^1.0.0",
+    "quasar": "^2.20.1",
+    "register-service-worker": "^1.7.2",
+    "vue": "^3.5.38",
+    "vue-router": "^4.5.0"
+  },
+  "devDependencies": {
+    "@capacitor/app": "^6.0.0",
+    "@capacitor/cli": "^6.0.0",
+    "@capacitor/core": "^6.0.0",
+    "@eslint/js": "^9.14.0",
+    "@quasar/app-vite": "^2.6.2",
+    "@types/node": "^22.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.62.0",
+    "@typescript-eslint/parser": "^8.62.0",
+    "@vue/test-utils": "^2.4.11",
+    "autoprefixer": "^10.4.20",
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0",
+    "eslint": "^9.14.0",
+    "eslint-plugin-vue": "^10.9.2",
+    "happy-dom": "^15.0.0",
+    "prettier": "^3.3.3",
+    "typescript": "~5.6.3",
+    "vite-plugin-checker": "^0.8.0",
+    "vitest": "^2.1.0",
+    "vue-tsc": "^2.1.0",
+    "workbox-build": "^7.4.1",
+    "workbox-cacheable-response": "^7.4.1",
+    "workbox-core": "^7.4.1",
+    "workbox-expiration": "^7.4.1",
+    "workbox-precaching": "^7.4.1",
+    "workbox-routing": "^7.4.1",
+    "workbox-strategies": "^7.4.1"
+  },
+  "engines": {
+    "node": "^20 || ^22",
+    "npm": ">= 9"
   }
 }

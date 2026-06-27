@@ -1,0 +1,187 @@
+// Jenkinsfile — Pipeline de release commun aux addons PersoIA.
+//
+// Modèle (cf. docs/04-releases.md) :
+//   • À chaque build : lint + tests (rapide, sur toute branche/PR).
+//   • Sur tag v* uniquement : build par plateforme + publication des artefacts
+//     sur la release GitHub correspondante (gh release upload --clobber).
+//
+// Les plateformes mobiles (Android/iOS) sont présentes mais DÉSACTIVÉES tant que
+// les clés de signature ne sont pas disponibles : passez ENABLE_ANDROID /
+// ENABLE_IOS à true (et configurez les credentials) le moment venu — aucun
+// refactor nécessaire. Voir docs/06-cles-mobiles.md.
+
+pipeline {
+    agent { label 'docker-enabled' }
+
+    environment {
+        CI = 'true'
+        // Bascules d'activation des cibles mobiles (clés pas encore provisionnées).
+        ENABLE_ANDROID = 'false'
+        ENABLE_IOS = 'false'
+    }
+
+    options {
+        timeout(time: 40, unit: 'MINUTES')
+        disableConcurrentBuilds()
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+        skipDefaultCheckout(true)
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                // retry(2) : le token GitHub App rate parfois le premier fetch
+                // ("Invalid username or token"). Un second essai génère un token frais.
+                retry(2) { checkout scm }
+            }
+        }
+
+        stage('Install') {
+            steps {
+                sh '''
+                    node --version
+                    npm --version
+                    npm ci
+                '''
+            }
+        }
+
+        stage('Lint & Test') {
+            steps {
+                sh '''
+                    npm run lint
+                    npm run test
+                '''
+            }
+        }
+
+        // --- Web installable (PWA) -------------------------------------------
+        stage('Build PWA') {
+            when { buildingTag() }
+            steps {
+                sh 'npm run build:pwa'
+                // dist/pwa = site statique déployable (Nginx, Pages, etc.).
+                sh 'cd dist/pwa && zip -r "../pwa-${TAG_NAME}.zip" .'
+                archiveArtifacts artifacts: 'dist/pwa-*.zip', fingerprint: true
+                script { ghUpload('dist/pwa-*.zip') }
+            }
+        }
+
+        // --- Desktop macOS (Electron) ----------------------------------------
+        // Agent Apple Silicon : DMG signé ad-hoc. Developer ID + notarisation =
+        // phase 2 (compte Apple Developer requis, cf. docs/06-cles-mobiles.md).
+        stage('Build Electron — macOS') {
+            when { buildingTag() }
+            agent { label 'macos-arm64' }
+            steps {
+                retry(2) { checkout scm }
+                sh '''
+                    export PATH="/opt/homebrew/bin:$PATH"
+                    npm ci
+                    npm run build:electron
+                '''
+                archiveArtifacts artifacts: 'dist/electron/Packaged/**/*.dmg', fingerprint: true
+                script { ghUpload('dist/electron/Packaged/*.dmg') }
+            }
+            post { always { cleanWs(deleteDirs: true, notFailBuild: true) } }
+        }
+
+        // --- Desktop Windows + Linux (Electron) ------------------------------
+        // electron-builder produit nsis (.exe) et AppImage. Le build Windows
+        // nécessite Wine sur agent Linux, ou un agent Windows dédié.
+        stage('Build Electron — Windows & Linux') {
+            when { buildingTag() }
+            agent { label 'docker-enabled' }
+            steps {
+                retry(2) { checkout scm }
+                sh '''
+                    npm ci
+                    # -mwl = mac/win/linux ; ici win + linux (mac fait sur agent dédié).
+                    npx quasar build -m electron -- --win --linux || npm run build:electron
+                '''
+                archiveArtifacts artifacts: 'dist/electron/Packaged/**/*.{exe,AppImage}', fingerprint: true, allowEmptyArchive: true
+                script {
+                    ghUpload('dist/electron/Packaged/*.exe')
+                    ghUpload('dist/electron/Packaged/*.AppImage')
+                }
+            }
+            post { always { cleanWs(deleteDirs: true, notFailBuild: true) } }
+        }
+
+        // --- Mobile Android (Capacitor) --------------------------------------
+        // Désactivé tant que le keystore Google Play n'est pas provisionné.
+        // Credentials attendus : 'android-keystore' (fichier), 'android-keystore-pass'.
+        stage('Build Android') {
+            when {
+                allOf {
+                    buildingTag()
+                    environment name: 'ENABLE_ANDROID', value: 'true'
+                }
+            }
+            agent { label 'android-sdk' }
+            steps {
+                retry(2) { checkout scm }
+                withCredentials([
+                    file(credentialsId: 'android-keystore', variable: 'KEYSTORE'),
+                    string(credentialsId: 'android-keystore-pass', variable: 'KEYSTORE_PASS')
+                ]) {
+                    sh '''
+                        npm ci
+                        npx quasar mode add capacitor || true
+                        npm run build:capacitor:android
+                        # Signature de l'AAB avec le keystore partagé (cf. docs/06).
+                        # jarsigner / gradle bundleRelease selon le pipeline natif.
+                    '''
+                }
+                archiveArtifacts artifacts: 'src-capacitor/android/**/*.{aab,apk}', fingerprint: true, allowEmptyArchive: true
+                script { ghUpload('src-capacitor/android/app/build/outputs/**/*.aab') }
+            }
+            post { always { cleanWs(deleteDirs: true, notFailBuild: true) } }
+        }
+
+        // --- Mobile iOS (Capacitor) ------------------------------------------
+        // Désactivé tant que le compte Apple Developer n'est pas disponible.
+        // Credentials attendus : certificat de distribution + provisioning profile.
+        stage('Build iOS') {
+            when {
+                allOf {
+                    buildingTag()
+                    environment name: 'ENABLE_IOS', value: 'true'
+                }
+            }
+            agent { label 'macos-arm64' }
+            steps {
+                retry(2) { checkout scm }
+                sh '''
+                    export PATH="/opt/homebrew/bin:$PATH"
+                    npm ci
+                    npx quasar mode add capacitor || true
+                    npm run build:capacitor:ios
+                    # xcodebuild -archive + export .ipa signé (cf. docs/06-cles-mobiles.md).
+                '''
+                archiveArtifacts artifacts: 'src-capacitor/ios/**/*.ipa', fingerprint: true, allowEmptyArchive: true
+                script { ghUpload('src-capacitor/ios/**/*.ipa') }
+            }
+            post { always { cleanWs(deleteDirs: true, notFailBuild: true) } }
+        }
+    }
+
+    post {
+        success { echo 'Pipeline terminé avec succès.' }
+        failure { echo 'Pipeline en échec.' }
+        always { cleanWs(deleteDirs: true, notFailBuild: true) }
+    }
+}
+
+// Publie un artefact (glob) sur la release GitHub du tag courant. No-op hors tag.
+def ghUpload(String pattern) {
+    if (!env.TAG_NAME) { return }
+    withCredentials([string(credentialsId: 'github-token', variable: 'GH_TOKEN')]) {
+        sh """
+            export PATH="/opt/homebrew/bin:\$PATH"
+            ls ${pattern} >/dev/null 2>&1 && \
+              gh release upload "\$TAG_NAME" ${pattern} --clobber || \
+              echo "Aucun artefact pour ${pattern} (ignoré)."
+        """
+    }
+}
