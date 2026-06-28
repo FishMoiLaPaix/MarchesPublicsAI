@@ -1,5 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync, existsSync, readFileSync } from 'node:fs';
+import {
+  mkdtempSync,
+  rmSync,
+  existsSync,
+  readFileSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -68,6 +74,33 @@ describe('loadConfig / saveConfig (store partagé)', () => {
     expect(cfg.PERSOIA_MODEL).toBe('small');
     // Le fichier ne contient plus la clé.
     expect(readFileSync(configPath, 'utf-8')).not.toContain('persoia_sk_xyz');
+  });
+
+  it("préserve les clés inconnues / d'autres outils lors d'un login/logout", async () => {
+    const { saveConfig, logout } = await import('../src/shared/persoia/config');
+    // Un autre outil (ou une clé privée) est déjà présent dans le store partagé.
+    writeFileSync(
+      configPath,
+      [
+        'PERSOIA_API_KEY=persoia_sk_other',
+        'PERSOIA_CONTEXT_WINDOW=8192',
+        'PRIVATE_TOOL_KEY=persoia_sk_priv',
+        'EMPTY_TOOL_KEY=', // clé inconnue volontairement vide
+      ].join('\n') + '\n',
+    );
+
+    // Notre addon se connecte (réécrit la clé) puis se déconnecte.
+    saveConfig({ PERSOIA_API_KEY: 'persoia_sk_mine' });
+    logout();
+
+    const content = readFileSync(configPath, 'utf-8');
+    // Les clés des autres outils survivent à un cycle login/logout.
+    expect(content).toContain('PERSOIA_CONTEXT_WINDOW=8192');
+    expect(content).toContain('PRIVATE_TOOL_KEY=persoia_sk_priv');
+    // Une clé inconnue volontairement vide est conservée (pas supprimée).
+    expect(content).toMatch(/^EMPTY_TOOL_KEY=$/m);
+    // Mais logout a bien retiré NOTRE clé API.
+    expect(content).not.toContain('persoia_sk_mine');
   });
 
   it('la variable env est prioritaire sur le fichier', async () => {
