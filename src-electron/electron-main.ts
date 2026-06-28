@@ -7,6 +7,14 @@ import { loadConfig, saveConfig, logout } from '../src/shared/persoia/config';
 import { loginLoopback } from '../src/shared/persoia/login-loopback';
 import type { PersoiaConfig } from '../src/shared/persoia/types';
 
+import { getSources, searchSource } from './sources';
+import { getGeoReference, type GeoCache } from './geo';
+import { storeGet, storeSet } from './store';
+import type {
+  GeoReference,
+  SearchSourceArgs,
+} from '../src/shared/mp/types';
+
 // Sous Linux, process peut être indéfini au tout premier tick.
 const platform = process.platform || os.platform();
 const currentDir = fileURLToPath(new URL('.', import.meta.url));
@@ -41,11 +49,36 @@ function registerPersoiaIpc(): void {
   ipcMain.handle('persoia:logout', () => logout());
 }
 
+// --- Pont métier MarchésPublics (IPC) ----------------------------------------
+// Tout ce qui a besoin de Node / contourne CORS (scraping des sources, géo) vit
+// ici et est exposé au renderer via le preload (window.mp).
+const geoCache: GeoCache = {
+  get: () => storeGet<GeoReference>('geo-ref-v1'),
+  set: (ref) => storeSet('geo-ref-v1', ref),
+};
+
+function registerMpIpc(): void {
+  ipcMain.handle('mp:getSources', () => getSources());
+  ipcMain.handle('mp:searchSource', (_e, args: SearchSourceArgs) =>
+    searchSource(args),
+  );
+  ipcMain.handle('mp:getGeoReference', async (): Promise<GeoReference | null> => {
+    try {
+      return await getGeoReference(geoCache);
+    } catch {
+      return null;
+    }
+  });
+  ipcMain.handle('mp:openUrl', (_e, url: string) => shell.openExternal(url));
+}
+
 async function createWindow(): Promise<void> {
   mainWindow = new BrowserWindow({
     icon: path.resolve(currentDir, 'icons/icon.png'),
-    width: 1000,
-    height: 700,
+    width: 1280,
+    height: 820,
+    minWidth: 900,
+    minHeight: 600,
     useContentSize: true,
     webPreferences: {
       contextIsolation: true,
@@ -72,7 +105,10 @@ async function createWindow(): Promise<void> {
 
 void app.whenReady().then(() => {
   registerPersoiaIpc();
+  registerMpIpc();
   void createWindow();
+  // Précharge le référentiel géo en tâche de fond (comme l'app actuelle).
+  void getGeoReference(geoCache).catch(() => {});
 });
 
 app.on('window-all-closed', () => {
