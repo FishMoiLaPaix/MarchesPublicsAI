@@ -23,6 +23,7 @@
           round
           :icon="$q.dark.isActive ? 'light_mode' : 'dark_mode'"
           :title="$q.dark.isActive ? 'Thème clair' : 'Thème sombre'"
+          :aria-label="$q.dark.isActive ? 'Passer au thème clair' : 'Passer au thème sombre'"
           @click="toggleDark"
         />
       </q-toolbar>

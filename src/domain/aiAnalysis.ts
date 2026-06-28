@@ -84,13 +84,18 @@ Réponds uniquement en JSON valide.`;
 /** Extrait le JSON de l'analyse (tolère un bloc ```json … ``` ou du texte autour). */
 export function parseAnalysis(response: string): AiAnalysis {
   const clean = response.replace(/```json|```/g, '').trim();
+  let parsed: unknown;
   try {
-    return JSON.parse(clean) as AiAnalysis;
+    parsed = JSON.parse(clean);
   } catch {
     const match = response.match(/\{[\s\S]*\}/);
-    if (match) return JSON.parse(match[0]) as AiAnalysis;
-    throw new Error('Réponse IA non-JSON');
+    if (!match) throw new Error('Réponse IA non-JSON');
+    parsed = JSON.parse(match[0]);
   }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('Réponse IA de forme inattendue');
+  }
+  return parsed as AiAnalysis;
 }
 
 /**

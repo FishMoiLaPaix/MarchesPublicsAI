@@ -79,7 +79,11 @@ interface BoampResponse {
 }
 
 function recordDepts(r: BoampRecord): string[] {
+  // code_departement est en général un tableau, mais BOAMP le renvoie parfois en
+  // chaîne : on couvre les deux pour ne pas perdre le département officiel.
   if (Array.isArray(r.code_departement)) return r.code_departement;
+  if (typeof r.code_departement === 'string' && r.code_departement)
+    return [r.code_departement];
   return r.code_departement_prestation ? [r.code_departement_prestation] : [];
 }
 

@@ -69,7 +69,18 @@ function registerMpIpc(): void {
       return null;
     }
   });
-  ipcMain.handle('mp:openUrl', (_e, url: string) => shell.openExternal(url));
+  ipcMain.handle('mp:openUrl', (_e, url: string) => {
+    // N'ouvrir QUE des URL http(s) (évite file://, etc. via shell.openExternal).
+    try {
+      const u = new URL(url);
+      if (u.protocol === 'http:' || u.protocol === 'https:') {
+        return shell.openExternal(url);
+      }
+    } catch {
+      /* URL invalide → ignorée */
+    }
+    return undefined;
+  });
 }
 
 async function createWindow(): Promise<void> {

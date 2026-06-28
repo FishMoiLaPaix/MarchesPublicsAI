@@ -275,6 +275,7 @@
                     :model-value="store.isSelected(s.id)"
                     dense
                     @update:model-value="store.toggleSource(s.id)"
+                    @click.stop
                   />
                 </q-item-section>
                 <q-item-section>{{ s.country }} {{ s.name }}</q-item-section>

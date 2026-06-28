@@ -28,6 +28,7 @@ describe('boampWhere (clause ODSQL)', () => {
 
   it('échappe les guillemets/backslashes des groupes', () => {
     expect(boampWhere({ keywordGroups: ['a"b'] })).toBe('(objet like "a b")');
+    expect(boampWhere({ keywordGroups: ['a\\b'] })).toBe('(objet like "a b")');
   });
 
   it('départements → code_departement OU code_departement_prestation', () => {
@@ -102,6 +103,7 @@ describe('registre des sources', () => {
       expect(s.id).toBeTruthy();
       expect(s.name).toBeTruthy();
       expect(s.country).toBeTruthy();
+      expect(s.description).toBeTruthy();
       expect(s.url).toMatch(/^https?:\/\//);
     }
   });

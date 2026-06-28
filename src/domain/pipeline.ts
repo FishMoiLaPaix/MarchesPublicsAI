@@ -39,9 +39,10 @@ export function processResults(input: ProcessInput): ProcessOutput {
   const nGroups = groups.length;
 
   const relMap: Record<number, AiRelevant> = {};
-  if (input.aiAnalysis?.relevant)
+  // Tolère une réponse IA malformée (relevant absent ou non-tableau).
+  if (Array.isArray(input.aiAnalysis?.relevant))
     input.aiAnalysis.relevant.forEach((r) => {
-      relMap[r.index] = r;
+      if (r && typeof r.index === 'number') relMap[r.index] = r;
     });
 
   let list: ScoredResult[] = input.allResults.map((r, i) => {

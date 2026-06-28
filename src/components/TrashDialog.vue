@@ -3,7 +3,7 @@
     :model-value="modelValue"
     @update:model-value="emit('update:modelValue', $event)"
   >
-    <q-card style="min-width: 420px; max-width: 600px">
+    <q-card style="width: 90vw; max-width: 600px">
       <q-card-section class="row items-center q-gutter-sm">
         <q-icon name="delete" />
         <div class="text-h6">

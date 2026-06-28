@@ -36,7 +36,7 @@ export interface SearchFacets {
   pubTo?: string;
   closeFrom?: string;
   closeTo?: string;
-  /** 'en-cours' | 'cloture' (ou vide). */
+  /** État de l'avis : '' (tous) | 'en-cours' | 'cloture'. */
   etat?: string;
 }
 

@@ -256,14 +256,23 @@ export const useSearchStore = defineStore('search', {
         this.selected.map(async (sourceId) => {
           const name = this.sources.find((s) => s.id === sourceId)?.name || sourceId;
           const status = this.sourceStatuses.find((s) => s.id === sourceId)!;
-          const result = await window.mp!.searchSource({
-            sourceId,
-            query: filters.scraperText,
-            depts: filters.depts,
-            facets: fp,
-            keywordGroups: filters.keywordGroups,
-            keywordMode: filters.keywordMode,
-          });
+          let result;
+          try {
+            result = await window.mp!.searchSource({
+              sourceId,
+              query: filters.scraperText,
+              depts: filters.depts,
+              facets: fp,
+              keywordGroups: filters.keywordGroups,
+              keywordMode: filters.keywordMode,
+            });
+          } catch (e) {
+            // Un échec IPC d'une source n'affecte pas les autres (batch isolé).
+            status.state = 'error';
+            status.label = `${name} ✗`;
+            status.title = e instanceof Error ? e.message : String(e);
+            return;
+          }
           if (result.error) {
             status.state = 'error';
             status.label = `${name} ✗`;
