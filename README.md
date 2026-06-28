@@ -1,51 +1,71 @@
 # MarchésPublics AI
 
-Outil de recherche intelligente dans les marchés publics français et européens.
+Application de bureau de recherche intelligente dans les marchés publics français
+et européens, avec analyse de pertinence par IA. Outil de l'écosystème **persoIA**
+(token partagé entre tous les outils).
 
-## Sources couvertes
-- **BOAMP** — Bulletin Officiel des Annonces de Marchés Publics (France)
-- **PLACE** — Plateforme des Achats de l'État (France)
-- **TED Europa** — Tenders Electronic Daily (UE)
-- **Maximilien** — Plateforme Île-de-France
-- **AchatPublic.com** — Agrégateur français
-- **Mégalis Bretagne** — Plateforme régionale
+Construite sur le squelette PersoIA : **Quasar 2 + Vue 3 + TypeScript**, packagée en
+desktop (Electron) avec une base mobile (Capacitor) et web (PWA).
+
+## Sources couvertes (11)
+
+| Source | Périmètre |
+|--------|-----------|
+| BOAMP | Bulletin Officiel des Annonces de Marchés Publics (FR) |
+| PLACE | Plateforme des Achats de l'État (FR) |
+| TED Europa | Tenders Electronic Daily (UE) |
+| J.O.U.E | Journal Officiel de l'UE — avis concernant la France |
+| Demat-AMPA | Plateforme Occitanie / Midi-Pyrénées |
+| Marchés Sécurisés | Plateforme nationale de dématérialisation |
+| e-Marchés Publics | Agrégateur national |
+| France Marchés | Agrégateur national |
+| Marchés Online | Appels d'offres publics et privés |
+| AW Solutions | Plateforme marches-publics.info |
+| BOAMP Attributions | Avis d'attribution (contrats attribués) |
 
 ## Intelligence Artificielle — persoIA
-L'application utilise **persoIA** comme unique fournisseur d'IA
-(`chat.persoia.com/v1`). Aucune clé à copier-coller : vous vous identifiez **une
-seule fois** dans le navigateur. La clé est stockée dans un emplacement commun à
-tous vos outils persoIA (`%APPDATA%\persoia\config.env`) et relue automatiquement.
 
-Au **premier lancement**, si aucune configuration persoIA n'existe encore,
-l'application ouvre directement le login navigateur pour la créer. Vous pouvez
-ensuite vous reconnecter / déconnecter depuis le panneau latéral. Authentification
-portée depuis [persoia-auth](https://github.com/FishMoiLaPaix/persoia-auth).
+Unique fournisseur d'IA (`chat.persoia.com/v1`). **Aucune clé à copier-coller** :
+vous vous identifiez **une seule fois** dans le navigateur (login loopback). La clé
+est stockée dans un emplacement commun à tous vos outils persoIA
+(`~/.config/persoia/config.env` sous Unix, `%APPDATA%\persoia\config.env` sous
+Windows) et relue automatiquement. Au **premier lancement**, l'app ouvre directement
+le login pour créer la configuration. Authentification fournie par le squelette
+(port de [persoia-auth](https://github.com/FishMoiLaPaix/persoia-auth)).
 
-## Installation Windows
+## Installation
 
-### Prérequis
-- Node.js 18+ : https://nodejs.org
+L'application est distribuée en **paquets installables** via les
+[GitHub Releases](https://github.com/FishMoiLaPaix/MarchesPublicsAI/releases) :
 
-### Première utilisation
-1. Extraire le ZIP dans un dossier
-2. Double-clic sur `INSTALLER.ps1` (clic droit → Exécuter avec PowerShell)
-3. Un raccourci est créé sur le Bureau pour les lancements suivants
+- **Windows** : installeur `.exe` (NSIS)
+- **macOS** : image `.dmg`
+- **Linux** : `.AppImage`
 
-### Lancement rapide (si déjà installé)
-```powershell
-cd C:\Users\<vous>\AppData\Local\MarchesPublicsAI
-npx electron .
-```
-
-## Configuration IA
-1. Au premier lancement, identifiez-vous dans le navigateur (login persoIA) — la
-   configuration est créée automatiquement
-2. Cliquer "Tester la connexion" pour vérifier
-3. La connexion est partagée avec vos autres outils persoIA
+> Mises à jour : l'app vérifie la dernière release publiée et affiche un bandeau
+> lorsqu'une nouvelle version est disponible.
 
 ## Utilisation
-1. Saisir votre recherche (ex: "développement d'une application mobile", "travaux de rénovation")
-2. Sélectionner les sources à explorer
-3. Activer/désactiver l'analyse IA
-4. Cliquer Rechercher
-5. Les résultats sont classés par pertinence avec score et explication IA
+
+1. Connectez-vous à persoIA (automatique au premier lancement)
+2. Sélectionnez les sources à explorer (panneau latéral)
+3. Saisissez une recherche (objet précis et/ou mots-clés `;`-séparés), affinez avec
+   les filtres (secteur, lieu, domaine, procédure, dates…)
+4. Activez/désactivez l'analyse IA
+5. Les résultats sont classés par pertinence (score local + ré-analyse IA) ; les
+   résultats non pertinents sont masqués par défaut (bouton pour les afficher)
+
+## Développement
+
+```bash
+npm install
+npm run dev                 # app web (dev)
+npx quasar dev -m electron  # app desktop (dev)
+npm run lint
+npm run test                # vitest
+npm run build               # SPA
+npm run build:pwa
+npm run build:electron      # DMG / NSIS / AppImage
+```
+
+Voir `CLAUDE.md` pour l'architecture détaillée.
