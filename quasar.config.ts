@@ -14,7 +14,7 @@ const pkg = JSON.parse(
 
 export default configure(() => {
   return {
-    boot: ['persoia'],
+    boot: ['pinia', 'persoia'],
 
     css: ['app.scss'],
 

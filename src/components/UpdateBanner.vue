@@ -1,5 +1,9 @@
 <template>
-  <q-banner v-if="info?.updateAvailable" dense class="bg-info text-white">
+  <q-banner
+    v-if="info?.updateAvailable"
+    dense
+    class="bg-info text-white"
+  >
     <template #avatar>
       <q-icon name="system_update" />
     </template>

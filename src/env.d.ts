@@ -1,4 +1,4 @@
-/* eslint-disable */
+ 
 // Types d'environnement Quasar + déclarations globales du projet.
 
 declare namespace NodeJS {

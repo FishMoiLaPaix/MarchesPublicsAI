@@ -6,7 +6,7 @@ import { detectPlatform } from 'src/shared/persoia/auth';
 // (ex. pré-charger la config, instancier un store Pinia, etc.).
 export default defineBoot(() => {
   if (process.env.DEV) {
-    // eslint-disable-next-line no-console
+     
     console.info(`[persoia] plateforme détectée : ${detectPlatform()}`);
   }
 });

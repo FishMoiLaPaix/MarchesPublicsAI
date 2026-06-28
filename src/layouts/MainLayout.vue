@@ -1,19 +1,45 @@
 <template>
-  <q-layout view="hHh lpR fFf">
-    <q-header elevated class="bg-primary text-white">
+  <q-layout view="lHh Lpr lFf">
+    <q-header
+      elevated
+      class="bg-primary text-white"
+    >
       <q-toolbar>
-        <q-toolbar-title>
-          {{ addon.displayName }}
-        </q-toolbar-title>
-        <q-chip
+        <q-btn
+          flat
           dense
-          square
-          color="white"
-          text-color="primary"
-          :label="platformLabel"
+          round
+          icon="menu"
+          aria-label="Menu"
+          @click="drawer = !drawer"
+        />
+        <q-toolbar-title class="row items-center q-gutter-sm">
+          <q-icon name="account_balance" />
+          <span>{{ addon.displayName }}</span>
+        </q-toolbar-title>
+        <q-btn
+          flat
+          dense
+          round
+          :icon="$q.dark.isActive ? 'light_mode' : 'dark_mode'"
+          :title="$q.dark.isActive ? 'Thème clair' : 'Thème sombre'"
+          @click="toggleDark"
         />
       </q-toolbar>
     </q-header>
+
+    <q-drawer
+      v-model="drawer"
+      show-if-above
+      bordered
+      :width="320"
+    >
+      <q-scroll-area class="fit">
+        <PersoiaSidebar />
+        <q-separator />
+        <SourceList />
+      </q-scroll-area>
+    </q-drawer>
 
     <q-page-container>
       <UpdateBanner />
@@ -23,12 +49,24 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { ref, onMounted } from 'vue';
+import { useQuasar, LocalStorage } from 'quasar';
 import { addon } from 'src/shared/addon';
-import { detectPlatform } from 'src/shared/persoia/auth';
+import PersoiaSidebar from 'components/PersoiaSidebar.vue';
+import SourceList from 'components/SourceList.vue';
 import UpdateBanner from 'components/UpdateBanner.vue';
 
-const platformLabel = computed(() =>
-  detectPlatform() === 'electron' ? 'desktop' : 'web',
-);
+const $q = useQuasar();
+const drawer = ref(true);
+
+function toggleDark(): void {
+  $q.dark.set(!$q.dark.isActive);
+  LocalStorage.set('theme', $q.dark.isActive ? 'dark' : 'light');
+}
+
+onMounted(() => {
+  // Thème sombre par défaut (parité avec l'app actuelle).
+  const saved = LocalStorage.getItem('theme') as string | null;
+  $q.dark.set(saved ? saved === 'dark' : true);
+});
 </script>
