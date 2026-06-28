@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.0.0 — Refonte Quasar & distribution par paquets
+## v1.1.0 — Refonte Quasar & distribution par paquets
 
 Première version **packagée** de MarchésPublics AI, reconstruite sur le squelette
 PersoIA (**Quasar 2 + Vue 3 + TypeScript**). Mêmes fonctionnalités qu'avant, mais
