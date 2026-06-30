@@ -72,8 +72,13 @@ export async function login(
   // Web : pas de loopback possible, on stocke la clé saisie.
   const key = (manualKey || '').trim();
   if (!key) return null;
-  localStorage.setItem(LS_KEY, key);
-  localStorage.setItem(LS_BASE, deduceApiBaseClient(key, ''));
+  try {
+    localStorage.setItem(LS_KEY, key);
+    localStorage.setItem(LS_BASE, deduceApiBaseClient(key, ''));
+  } catch {
+    // LocalStorage indisponible (sandbox, navigation privée stricte, SSR/tests).
+    return null;
+  }
   return key;
 }
 
@@ -83,7 +88,11 @@ export async function logout(): Promise<void> {
     await window.persoia!.logout();
     return;
   }
-  localStorage.removeItem(LS_KEY);
+  try {
+    localStorage.removeItem(LS_KEY);
+  } catch {
+    // LocalStorage indisponible — la clé n'est pas stockée, rien à effacer.
+  }
 }
 
 export { PERSOIA_DEFAULT_BASE };
