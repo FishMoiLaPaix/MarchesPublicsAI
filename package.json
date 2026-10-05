@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "Recherche intelligente dans les marchés publics français et européens (scoring IA).",
   "productName": "MarchésPublics AI",
-  "author": "FishMoiLaPaix",
+  "author": "MSPLR",
   "license": "MIT",
   "private": true,
   "type": "module",
